@@ -344,10 +344,13 @@ export function screenSkills({ files, paths } = {}) {
 
 const skippedDirs = new Set(['node_modules', '.git']);
 
-async function walk(root, prefix = '', collected = []) {
+export async function walk(root, prefix = '', collected = []) {
   for (const entry of await readdir(join(root, prefix), { withFileTypes: true })) {
     // node_modules/.git 里的 SKILL.md 是第三方 vendored 内容，不算这座库的技能。
     if (entry.isDirectory() && skippedDirs.has(entry.name)) continue;
+    // 装配根/回执等顶层下划线目录是投影基础设施，不是源库技能（装配根规范 §1 扫描防重）：
+    // 只排除**顶层**，包内 _shared 一类目录仍随所属技能扫描。
+    if (entry.isDirectory() && prefix === '' && entry.name.startsWith('_')) continue;
     const relPath = `${prefix}${entry.name}${entry.isDirectory() ? '/' : ''}`;
     if (entry.isDirectory()) await walk(root, relPath, collected);
     else collected.push(relPath);

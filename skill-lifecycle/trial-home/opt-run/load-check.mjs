@@ -110,10 +110,17 @@ for (const op of plan.ops.filter(entry => typeof entry.relPath === 'string')) {
   }
 }
 
-const probes = [
+// 同名字段件（未改名，如 genspark 单文件包）：②/③ 的"中文名不可见"探针不适用——
+// pre-root 镜像仍跑（验证备份完整性），但预期应为 loaded，且 mixed 与 kebab 重复则略去。
+const renamed = preName !== finalName;
+const probes = renamed ? [
   { key: 'kebab', expect: 'loaded', skillId: finalName, parent: 'kebab-root', name: finalName },
   { key: 'pre-writeback', expect: 'ignored', skillId: preName, parent: 'pre-root', name: preName },
   { key: 'mixed', expect: 'loaded', skillId: finalName, parent: 'mixed-root', name: preName },
+  { key: 'library-after', expect: 'loaded', skillId: finalName, parent: 'library-root', name: finalName },
+] : [
+  { key: 'kebab', expect: 'loaded', skillId: finalName, parent: 'kebab-root', name: finalName },
+  { key: 'pre-writeback', expect: 'loaded', skillId: finalName, parent: 'pre-root', name: preName },
   { key: 'library-after', expect: 'loaded', skillId: finalName, parent: 'library-root', name: finalName },
 ];
 
@@ -150,6 +157,8 @@ console.table(rows.map(({ detail, ...rest }) => ({ ...rest, detail: detail.slice
 console.log(`（库内件数 ${candidateFiles.length}，写回后副本件数一致：${verbatim}）`);
 for (const failure of failures) console.error(`FAIL ${failure}`);
 console.log(failures.length === 0
-  ? '\n装载验证 PASS：① kebab 可加载、② 写回前（中文名）不可见、③ 只改 name 不改目录可加载、④ 写回后的库内实物可加载且与候选逐字一致'
+  ? (renamed
+    ? '\n装载验证 PASS：① kebab 可加载、② 写回前（中文名）不可见、③ 只改 name 不改目录可加载、④ 写回后的库内实物可加载且与候选逐字一致'
+    : '\n装载验证 PASS（同名字段件）：① 候选可加载、② 写回前镜像可加载且 SKILL.md == 计划写回前摘要、④ 写回后库内实物可加载且与候选逐字一致（②/③ 改名探针不适用，已在记录注明）')
   : `\n装载验证 FAIL（${failures.length}）`);
 process.exitCode = failures.length === 0 ? 0 : 1;

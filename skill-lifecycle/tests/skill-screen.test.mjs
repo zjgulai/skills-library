@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { screenSkills } from '../control/skill-screen.mjs';
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { screenSkills, walk } from '../control/skill-screen.mjs';
 
 const BODY = [
   '## Workflow', '',
@@ -363,4 +366,19 @@ test('a name used twice in the library is a collision', () => {
   assert.deepEqual(codesOf(report, 'b/SKILL.md'), ['DUPLICATE_NAME', 'NAME_FOLDER_MISMATCH']);
   assert.equal(report.collisions.length, 1);
   assert.deepEqual([...report.collisions[0].paths].sort(), ['a/SKILL.md', 'b/SKILL.md']);
+});
+
+test('top-level underscore dirs (assembly root) are skipped, package-internal _shared is kept', async (t) => {
+  const base = await mkdtemp(join(await realpath(tmpdir()), 'screen-walk-'));
+  t.after(() => rm(base, { recursive: true, force: true }).catch(() => {}));
+  await mkdir(join(base, '_assembly-v1', 'pkg', 'x'), { recursive: true });
+  await writeFile(join(base, '_assembly-v1', 'pkg', 'x', 'SKILL.md'), 'x\n');
+  await mkdir(join(base, '_assembly-receipts'), { recursive: true });
+  await writeFile(join(base, '_assembly-receipts', 'r.json'), '{}\n');
+  await mkdir(join(base, 'pkg', '_shared'), { recursive: true });
+  await writeFile(join(base, 'pkg', 'SKILL.md'), 'y\n');
+  await writeFile(join(base, 'pkg', '_shared', 'note.md'), 'z\n');
+  const paths = await walk(base);
+  assert.deepEqual(paths.sort(), ['pkg/SKILL.md', 'pkg/_shared/note.md'],
+    `顶层下划线目录要排除、包内 _shared 要保留：${JSON.stringify(paths)}`);
 });
