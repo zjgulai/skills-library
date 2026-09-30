@@ -42,7 +42,7 @@ NARR = {
  'position': '把经营目标、优先级与资源约束转成可对照的经营节奏与决策材料，并让独立复核保持可见；让"目标—资源—复盘—改进"成为同一条可追踪的线。',
  'questions': ['目标与资源是否匹配；重大资源取舍需要哪些依据材料', '经营偏差如何归因、复盘与形成改进动作线索', '内控与独立复核的发现如何进入整改与跟踪'],
  'boundary': '不含各业务域的具体执行判断（渠道、供应、产品、品牌、服务各有家族）；不含对外的资金、承诺与岗位处置动作——这类动作一律准备材料后交相应有权责任方。',
- 'seam': '向全部 8 家族收取月度经营事实（引用各家族产物版本）；与数据与AI运行家族对接口径与数据供给（见交接 B）。',
+ 'seam': '向全部 8 家族收取月度经营事实（引用各家族产物版本）；与数据与AI运行家族对接口径与数据供给（口径与缺口处置见交接 A③）。',
  'flow': [
   ('季度/年度开始', '按目标拆解与资源情景比较形成经营节奏材料（建议稿）', '目标与资源情景材料 v1', '经营与组织记录'),
   ('月度', '汇总各家族经营事实，做偏差归因与复盘材料', '月度复盘材料 v1', '同上'),
@@ -94,7 +94,7 @@ NARR = {
  'position': '把需求变成可兑现的承诺：需求预测、供给安排、供应商协同、生产质量、物流仓储到退货处置的兑现链。',
  'questions': ['预测情景与供给方案是否说明了兑现条件', '承诺在途与库存占用是否互相可见', '质量与履约异常如何回收处理'],
  'boundary': '不含对客承诺与渠道动作（渠道经营家族）；不含账务确认（财务与合规家族）；价格与促销安排由定价职责处理。',
- 'seam': '接收渠道经营的可售需求与退货事实；产物（供给方案、可售口径）交渠道经营与财务与合规引用（见交接 A/B）。',
+ 'seam': '接收渠道经营的可售需求与退货事实；产物（供给方案、可售口径）交渠道经营引用（见交接 A），退货与质量事实交产品与服务侧（见交接 B）；成本事实由财务与合规按需取用。',
  'flow': [
   ('需求变化', '按预测情景形成供给安排建议，注明兑现条件', '供给方案 v1', '供应与履约记录'),
   ('采购/生产', '供应商协同与生产质量跟踪，记录偏差', '履约跟踪表 v1', '同上'),
@@ -172,7 +172,7 @@ NARR = {
  'position': '把购买前后的体验与反馈变成可处理的线索：售前指导、客诉处理材料、体验洞察与会员教育。',
  'questions': ['客诉与体验反馈是否被结构化回收', '反馈线索是否回到产品、供应与渠道形成改进输入', '服务口径是否与售后承诺一致'],
  'boundary': '不含退款与补偿的决定（相应有权责任方）；不含产品缺陷认定（产品验证职责）；客诉处置动作按各渠道既有职责推进。',
- 'seam': '接收渠道经营的订单/退货事实与供应侧的处置记录；反馈线索交产品与创新、供应与履约（见交接 A）。',
+ 'seam': '接收渠道经营的订单与退货事实、供应侧的处置记录；体验洞察交产品与创新、供应与履约与渠道经营核对（见交接 A）。',
  'flow': [
   ('售前', '整理购买指导与常见问题材料（引用商品资料版本）', '售前材料 v1', '服务与体验记录'),
   ('售中后', '客诉受理与处理材料整理，标注处理状态', '客诉处理材料 v1', '同上'),
@@ -219,7 +219,7 @@ NARR = {
  'position': '让口径、数据、集成与运行底座可靠：对象与口径约定、数据供给与质量、集成工具、知识与技能治理、平台运行检查。',
  'questions': ['同一口径是否只有一个家、变更是否可追溯', '数据缺口的修复是否定向且留痕', '技能与 Preset 资产是否与其定稿版本一致'],
  'boundary': '不含业务口径的含义判断（对应业务域负责含义，本家族维护约定与协调）；不含对模型的评测结论作业务结论；平台改动类动作按相应权限安排。',
- 'seam': '向全部家族供给口径与数据（引用版本与质量说明）；接收各家族的缺口反馈（见交接 A/B）。',
+ 'seam': '向全部家族供给口径与数据（引用版本与质量说明）；缺口反馈入向见交接 A、装配回填出向见交接 B。',
  'flow': [
   ('口径工作', '维护对象关系与口径约定，记录变更与适用面', '口径约定 v1', '数据与AI运行记录'),
   ('数据供给', '按用途供给数据并附质量说明；异常时定向修复', '数据供给单 v1', '同上'),
@@ -243,6 +243,26 @@ NARR = {
 },
 }
 
+# 作业流逐步技能标注（评审修订：步骤须点名所用技能；无专用技能者如实说明）
+FLOW_SKILLS = {
+'经营与组织': ['ecommerce-quarterly-strategy、okr-planner', 'ecommerce-monthly-review、variance-analysis',
+                'triage、risk-assessment', 'fact-check、performance-review'],
+'产品与创新': ['customer-research、competitor-profiling', 'idea-to-prd、product-scope',
+                'product-design、work-handoff', 'market-viability-logic-auditor、jtbd-analyzer'],
+'供应与履约': ['inventory-demand-forecaster、supply-chain-controller', 'contract-review、product-data-deep-analysis',
+                'ecommerce-ops、shipment-tracking', 'customer-escalation、international-shipping-customs'],
+'渠道经营': ['multi-platform-listing-generator、amazon-listing-expert', 'amazon-competitor-monitor、amazon-sorftime-research、platform-price-monitor',
+                'pricing-strategy、margin-analyzer', '（无专用技能，结算以平台原始记录与经营表为准）'],
+'品牌与增长': ['brand-narrative-playbook、brand-voice-glossary', 'content-strategy、copywriting、ad-creative',
+                'paid-advertising、creator-marketing', 'split-test-evaluator、retention-manager'],
+'服务与体验': ['customer-reply-craft、product-attribute-analyzer', 'ticket-deflector',
+                'bestseller-pattern-decoder、community-engagement', 'community-ops、content-system'],
+'财务与合规': ['close-month、reconciliation', 'financial-statements、financial-modeling、journal-entry-prep',
+                'cash-flow-snapshot、runway-calculator、unit-economics', 'tos-risk-checker、legal-risk-assessment'],
+'数据与AI运行': ['terminology-standardizer、ddd-glossary-gen', 'data-context-extractor、validate-data、dataset-health-audit',
+                'api-doc-gen、incident-retrospective、log-diagnostic', 'skill-creator、skill-evaluator、skill-optimizer、skill-structure-doctor'],
+}
+
 BEGIN = '<!-- BEGIN-GENERATED-TABLE -->'
 def role_label(rid):
     info = role_info.get(rid)
@@ -255,7 +275,7 @@ for fam in defs['families']:
     name = fam['name']
     nar = NARR[name]
     roles_md = '\n'.join(
-        f"| `{r['id']}` | {r['name']} | {r['title']} | {r['plane']} |" for r in fam['roles'])
+        f"| `{r['id']}` | {r['name']} | {r['title']} | frozen-v1 · 面：{r['plane']} |" for r in fam['roles'])
     skill_rows = []
     crossref_ok = True
     for s in fam['skillsPrimary']:
@@ -269,14 +289,18 @@ for fam in defs['families']:
         row = ledger.get(s, {})
         cands = [c for c in (row.get('roleCandidates') or '').split(';') if c.strip()]
         owner = skill_primary_family.get(s, '?')
-        first = next((c for c in cands if any(r['id'] == c for r in fam['roles'])),
-                     cands[0] if cands else None)
-        who = f'{role_label(first)}（引用）' if first else '（引用）'
+        mine = [c for c in cands if any(r['id'] == c for r in fam['roles'])]
+        who = ('、'.join(role_label(c) for c in mine) if mine
+               else (role_label(cands[0]) if cands else ''))
+        who = f'{who}（引用）' if who else '（引用）'
         score = score_pair(row.get('optReadings', ''))
         state = row.get('optState', '?') + (f" · {score}" if score else '')
         skill_rows.append(f"| `{s}` | {who} | {GROUP_SRC.get(row.get('group'), '?')} | {state} | 共享（主域：{owner}） |")
 
-    flow_md = '\n'.join(f"| {i+1} | {a} | {b} | {c} | {d} |" for i, (a, b, c, d) in enumerate(nar['flow']))
+    fs = FLOW_SKILLS.get(name, [])
+    flow_md = '\n'.join(
+        (f"| {i+1} | {a} | {b}{(fs[i] if fs[i].startswith('（') else f'（用 {fs[i]}）')} | {c} | {d} |" if i < len(fs) else f"| {i+1} | {a} | {b} | {c} | {d} |")
+        for i, (a, b, c, d) in enumerate(nar['flow']))
     hand_md = []
     for h in nar['handoffs']:
         hand_md.append(f"""### 交接 {h['id']}：{h['scene']}
@@ -291,16 +315,16 @@ for fam in defs['families']:
 
     extra = ''
     if name == '渠道经营':
-        extra = '\n> 跨域件说明：`compliance-check`、`compliance-tracking` 为跨家族共享件（主域版本维护见 DOM-07 侧），本家族只引用；结算边界句见 §1。'
+        extra = '\n> 跨域件说明：共享件（如 `compliance-check`、`compliance-tracking`）主域在财务与合规侧、版本由主域家族维护，本家族只引用；结算边界句见 §1。'
     if name == '财务与合规':
-        extra = '\n> 跨域件说明：`compliance-check`、`compliance-tracking`、`compliance-audit`、`contract-review`、`margin-analyzer` 为共享件（主域在本家族者由本家族维护版本）；结算边界句见 §1。'
+        extra = '\n> 跨域件说明：`compliance-check`、`compliance-tracking`、`compliance-audit` 主域在本家族（版本由本家族维护，评审例外表见 family-definitions `reviewOverrides`）；`contract-review`（主域：供应与履约）、`margin-analyzer`（主域：渠道经营）为共享件、本家族只引用；结算边界句见 §1。'
 
     planes = []
     for r in fam['roles']:
         if r['plane'] not in planes:
             planes.append(r['plane'])
 
-    md = f"""# {fam['id']} {name} Playbook — v1（105-012 起草稿）
+    md = f"""# {fam['id']} {name} Playbook — v1
 
 ## 0. 元数据
 
@@ -309,14 +333,17 @@ for fam in defs['families']:
 | family_id | `{fam['id']}` |
 | 家族名 | {name} |
 | 面 | {'、'.join(planes)}（成员岗位所在面） |
-| 版本 | v1（2026-10-01 起草，评审后定稿） |
+| 版本 | v1（2026-10-01 定稿） |
 | 维护角色 | {role_label(fam['roles'][0]['id'])} |
-| 依据 | `114-w3-family/family-definitions-v1.json`；模板 `playbook-template-v1.md`；角色候选清单 `frozen-v1` |
+| 依据 | `114-w3-family/family-definitions-v1.json`（含评审例外表）；模板 `playbook-template-v1.md`；角色候选清单 `frozen-v1` |
+
+> 覆盖说明：8 家族覆盖 50 个 AGT 岗位；`MGT-001`…`MGT-003`（决策权平面）不归任何家族，作为跨家族使用者。
 
 ## 1. 定位与边界
 
 - **一句话定位**：{nar['position']}
-- **服务的经营问题**：{chr(10).join('- ' + q for q in nar['questions'])}
+- **服务的经营问题**：
+{chr(10).join('- ' + q for q in nar['questions'])}
 - **边界（明确不含）**：{nar['boundary']}
 - **与相邻家族的接缝**：{nar['seam']}
 
@@ -324,7 +351,7 @@ for fam in defs['families']:
 
 ### 2.1 岗位
 
-| 岗位 | 别名 | 职责（原文标题） | 面 |
+| 岗位 | 别名 | 职责（原文标题） | 角色候选清单交叉引用 |
 |---|---|---|---|
 {roles_md}
 
@@ -338,7 +365,7 @@ for fam in defs['families']:
 
 ## 3. 端到端作业流
 
-| # | 触发/场景 | 步骤 | 产物（版本口径） | 记录到 |
+| # | 触发/场景 | 步骤（做什么、用什么技能） | 产物（版本口径） | 记录到 |
 |---|---|---|---|---|
 {flow_md}
 
@@ -368,7 +395,7 @@ for fam in defs['families']:
 
 | 版本 | 日期 | 变更 | 评审 |
 |---|---|---|---|
-| v1（草案） | 2026-10-01 | 首版起草（105-012） | 待评审 |
+| v1 | 2026-10-01 | 首版（105-012 起草＋独立评审修订后定稿） | 评审通过（2026-10-01，116 号） |
 """
     p = OUT / f"playbook-{fam['id']}-{name}.md"
     p.parent.mkdir(parents=True, exist_ok=True)
