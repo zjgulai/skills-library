@@ -1,0 +1,127 @@
+{
+  "schemaVersion": 1,
+  "mapId": "skill-lifecycle-workspace",
+  "revision": 3,
+  "language": "zh",
+  "project": {"id": "skills-management", "name": "Skills 管理｜实验与治理工作区", "revision": "1005b28261b06d311ea9a8f073c46073ea5de73a"},
+  "constraintDiscovery": {
+    "checkedAt": "2026-09-30T05:55:12Z",
+    "checkedPaths": ["docs/specs/2026-09-25-dsh-skill-lifecycle/README.md", "docs/specs/2026-09-25-dsh-skill-lifecycle/03-DSH运行与验收契约.md", "docs/specs/2026-09-25-dsh-skill-lifecycle/08-P0读取预算与终止控制契约.md", "skill-lifecycle/control", "skill-lifecycle/tests", "skill-lifecycle/trial-home/run-probe.mjs", "skill-lifecycle/trial-home/screening/skill-repair-writeback.mjs", "feishu-append.py", "feishu-browser.py"],
+    "uninspectedPaths": ["众家之言", "skill-lifecycle/trial-home/candidates", "skill-lifecycle/trial-home/opt-run", "skill-lifecycle/trial-home/runs", "skill-lifecycle/trial-home/sessions", "skill-lifecycle/trial-home/terminal", "skill-lifecycle/trial-home/probe-a", "skill-lifecycle/trial-home/probe-b"]
+  },
+  "modules": [
+    {
+      "id": "knowledge", "name": "契约与项目知识", "role": "generic", "kind": "local",
+      "roleAssessment": {"basis": "out-of-taxonomy", "note": "方案、决策、教材与可视化工件属于知识资产，不是前后端服务或数据库。"},
+      "responsibility": "保存运行与验收契约、分阶段决策、历史证据和教材；本次新增 Birdview 图谱。历史阶段描述不代表当前运行状态。",
+      "ownership": [{"kind": "directory", "path": "docs"}, {"kind": "directory", "path": "众家之言"}, {"kind": "directory", "path": ".birdview"}],
+      "evidence": [{"path": "docs/specs/2026-09-25-dsh-skill-lifecycle/03-DSH运行与验收契约.md", "line": 5, "endLine": 23, "note": "按内容、环境身份及九层验收组织证据。"}],
+      "status": "supported", "openQuestions": ["原始 ZIP/PDF/Word 资料未做逐包版权与隐私审核，不默认公开。", "已建立首次源码提交；约束图仅审根集成规则和两份核心契约，20份来源已采集，不是完整语义审查。历史文档、教材及私有飞书脚本保留本地，公开克隆不包含这些证据。"],
+      "layout": {"row": 0, "column": 0}
+    },
+    {
+      "id": "trial-runner", "name": "实验装配与验证", "role": "backend", "kind": "local",
+      "responsibility": "在专用目录装配 DSH 原生服务图，加载预检材料并运行受控实验；测试驱动含离线与显式 live 分支，不等于常驻后台应用。",
+      "ownership": [{"kind": "file", "path": "skill-lifecycle/trial-home/run-probe.mjs"}, {"kind": "file", "path": "skill-lifecycle/trial-home/enabled-smoke.mjs"}, {"kind": "directory", "path": "skill-lifecycle/trial-home/presets"}, {"kind": "directory", "path": "skill-lifecycle/tests"}],
+      "evidence": [{"path": "skill-lifecycle/trial-home/run-probe.mjs", "line": 13, "endLine": 28, "note": "导入控制层与外部 DSH 应用内的原生模块。"}, {"path": "skill-lifecycle/trial-home/run-probe.mjs", "line": 57, "endLine": 100, "note": "预检后建立专用工作区并装配服务图与可选 provider。"}],
+      "status": "supported", "openQuestions": ["本次未启动付费模型实验；运行时装配依赖本机 DSH，不保证新机器直接运行全套测试。"],
+      "layout": {"row": 1, "column": 0}
+    },
+    {
+      "id": "runtime-guard", "name": "执行隔离与预算控制", "role": "security", "kind": "local",
+      "responsibility": "负责预检、文件白名单、受控计算、请求预算预留与结算、停止恢复；仅约束所属试验，不接管日常会话。",
+      "ownership": [{"kind": "file", "path": "skill-lifecycle/control/dsh-plugin.mjs"}, {"kind": "file", "path": "skill-lifecycle/control/preflight.mjs"}, {"kind": "file", "path": "skill-lifecycle/control/bounded-files.mjs"}, {"kind": "file", "path": "skill-lifecycle/control/table-compute.mjs"}, {"kind": "file", "path": "skill-lifecycle/control/run-state.mjs"}, {"kind": "file", "path": "skill-lifecycle/control/budget-ledger.mjs"}, {"kind": "file", "path": "skill-lifecycle/control/stop-run.mjs"}],
+      "evidence": [{"path": "skill-lifecycle/control/dsh-plugin.mjs", "line": 146, "endLine": 217, "note": "注册三个受限工具，对工具与技能名实施准入。"}, {"path": "skill-lifecycle/control/dsh-plugin.mjs", "line": 222, "endLine": 237, "note": "在请求流上核对所属运行与请求可计量性。"}],
+      "status": "supported", "openQuestions": [], "layout": {"row": 1, "column": 1}
+    },
+    {
+      "id": "evaluation", "name": "对照评测与迭代判定", "role": "backend", "kind": "local",
+      "responsibility": "读取运行观察，按冻结判据比较实验臂、归因、盲判及终测；与模型执行分离，不把报告写出视为业务通过。",
+      "ownership": [{"kind": "file", "path": "skill-lifecycle/control/iteration-loop.mjs"}, {"kind": "file", "path": "skill-lifecycle/control/arm-scope.mjs"}, {"kind": "file", "path": "skill-lifecycle/control/attribution.mjs"}, {"kind": "file", "path": "skill-lifecycle/control/batch-group.mjs"}, {"kind": "file", "path": "skill-lifecycle/control/blind-packet.mjs"}, {"kind": "file", "path": "skill-lifecycle/control/terminal-set.mjs"}, {"kind": "file", "path": "skill-lifecycle/trial-home/a4/rounds.mjs"}],
+      "evidence": [{"path": "skill-lifecycle/trial-home/a4/rounds.mjs", "line": 24, "endLine": 38, "note": "读取 W2/终测任务记录，转换观察后调用 judgeRound。"}, {"path": "skill-lifecycle/control/iteration-loop.mjs", "line": 7, "endLine": 10, "note": "目标、回归、成本容忍与轮次构成判定输入。"}],
+      "status": "supported", "openQuestions": ["历史评测材料与金标不是公开源码；不在本次安装中重新评测技能。"], "layout": {"row": 2, "column": 0}
+    },
+    {
+      "id": "candidate-release", "name": "需求到候选及启用回退", "role": "backend", "kind": "local",
+      "responsibility": "接收需求、建立候选身份，按计划安装并重读核验，失败恢复，记录安装与观察回执；不意味着自动生产发布。",
+      "ownership": [{"kind": "file", "path": "skill-lifecycle/control/requirement-intake.mjs"}, {"kind": "file", "path": "skill-lifecycle/control/draft-candidate.mjs"}, {"kind": "file", "path": "skill-lifecycle/control/skill-candidate.mjs"}, {"kind": "file", "path": "skill-lifecycle/control/enablement.mjs"}],
+      "evidence": [{"path": "skill-lifecycle/control/enablement.mjs", "line": 341, "endLine": 415, "note": "校验允许父目录、候选和计划，备份并核对安装结果后写回执。"}],
+      "status": "supported", "openQuestions": [], "layout": {"row": 2, "column": 1}
+    },
+    {
+      "id": "governance", "name": "治理账本与处置计划", "role": "backend", "kind": "local",
+      "responsibility": "维护版本处置链、依赖登记、复测调度、合并与退役计划；账本是本地文件，不是远端数据库。",
+      "ownership": [{"kind": "file", "path": "skill-lifecycle/control/governance-ledger.mjs"}, {"kind": "file", "path": "skill-lifecycle/control/dependency-registry.mjs"}, {"kind": "file", "path": "skill-lifecycle/control/retest-scheduling.mjs"}, {"kind": "file", "path": "skill-lifecycle/control/change-plans.mjs"}, {"kind": "file", "path": "skill-lifecycle/control/plan-reconcile.mjs"}],
+      "evidence": [{"path": "skill-lifecycle/control/governance-ledger.mjs", "line": 145, "endLine": 184, "note": "维护 dispositions.jsonl，追加前重读链头并拒绝重复及分叉。"}],
+      "status": "supported", "openQuestions": ["未发现把所有阶段串联的统一自动总控，图中不虚构自动执行边。"], "layout": {"row": 3, "column": 1}
+    },
+    {
+      "id": "library-maintenance", "name": "技能库筛查与安全写回", "role": "backend", "kind": "local",
+      "responsibility": "提供静态筛查、命名和引用修复、评测编排及写回工具；默认 dry-run，apply 按摘要核对原件与候选并保留备份回执。",
+      "ownership": [{"kind": "file", "path": "skill-lifecycle/control/skill-screen.mjs"}, {"kind": "directory", "path": "skill-lifecycle/trial-home/screening"}],
+      "evidence": [{"path": "skill-lifecycle/trial-home/screening/skill-repair-writeback.mjs", "line": 29, "endLine": 35, "note": "写回默认 apply=false；备份与回执属于运行数据。"}, {"path": "skill-lifecycle/trial-home/screening/skill-repair-writeback.mjs", "line": 60, "endLine": 121, "note": "写前校验两侧摘要，写后重读，拒绝已存在的执行回执。"}],
+      "status": "supported", "openQuestions": ["screening 同时包含源码与报告，发布必须按文件类型和用途审查，不可整目录忽略或全收。"], "layout": {"row": 3, "column": 0}
+    },
+    {
+      "id": "feishu-publish", "name": "教材浏览器发布", "role": "backend", "kind": "local",
+      "responsibility": "读取本地教材片段，通过已有浏览器标签定位末尾锚点、粘贴并回读验证；是独立人工工作流，不是实验主链。",
+      "ownership": [{"kind": "file", "path": "feishu-append.py"}, {"kind": "file", "path": "feishu-browser.py"}, {"kind": "file", "path": "feishu-verify.py"}, {"kind": "file", "path": "feishu-verify-tail.py"}, {"kind": "file", "path": "feishu-verify-section.py"}, {"kind": "file", "path": "feishu-walk.py"}],
+      "evidence": [{"path": "feishu-append.py", "line": 10, "endLine": 36, "note": "调用浏览器桥执行锚点检查与粘贴。"}, {"path": "feishu-browser.py", "line": 8, "endLine": 16, "note": "桥接本机浏览器脚本，绑定特定标签；没有在图谱中复制其私有文档标识。"}],
+      "status": "supported", "openQuestions": ["包含用户专属文档定位信息与旧进程绑定，本次不运行，也不默认公开。"], "layout": {"row": 0, "column": 1}
+    },
+    {
+      "id": "dsh-host", "name": "外部 DSH 原生运行时", "role": "backend", "kind": "external",
+      "responsibility": "提供 Cordis、工具、会话、Agent loop 与模型适配器；代码来自本机已装应用，不随当前目录 Git 上传。",
+      "ownership": [], "evidence": [{"path": "skill-lifecycle/trial-home/run-probe.mjs", "line": 20, "endLine": 28, "note": "APP 常量与 require.resolve 明确外部运行源。"}],
+      "status": "supported", "openQuestions": ["当前映射只核对接缝，不表示外部宿主各版本均兼容。"], "layout": {"row": 1, "column": 2}
+    },
+    {
+      "id": "model-provider", "name": "外部模型服务", "role": "backend", "kind": "external",
+      "responsibility": "仅经获准 live 路径发起模型请求，凭据在本机处理；本次 Birdview 接入不调用该服务。",
+      "ownership": [], "evidence": [{"path": "skill-lifecycle/trial-home/run-probe.mjs", "line": 93, "endLine": 102, "note": "可选 pi-ai provider 从连接对象注册。"}],
+      "status": "supported", "openQuestions": [], "layout": {"row": 2, "column": 2}
+    },
+    {
+      "id": "skill-library", "name": "外部技能库本体", "role": "generic", "kind": "external",
+      "roleAssessment": {"basis": "out-of-taxonomy", "note": "这是项目根外的技能文件树，不是数据库服务。"},
+      "responsibility": "存放实际可复用技能包，位于 AgentTools/技能库；与当前 skill管理 工作区不同，当前根的 Git 不包含该目录。",
+      "ownership": [], "evidence": [{"path": "skill-lifecycle/trial-home/screening/skill-repair-writeback.mjs", "line": 17, "endLine": 18, "note": "写回工具将 --library 根作为显式外部输入。"}],
+      "status": "supported", "openQuestions": ["用户已确认只推送当前治理项目，不纳入外部技能库；此处仅记录本地真实依赖边界。"], "layout": {"row": 3, "column": 2}
+    },
+    {
+      "id": "birdview-sync", "name": "Birdview 本地同步", "role": "frontend", "kind": "local",
+      "responsibility": "以固定版本渲染架构、约束与声明活动；回环服务自动重渲染并刷新页面，来源文件变化仅提示待复核，不调用模型、不修改业务文件。",
+      "ownership": [{"kind":"directory","path":"scripts"},{"kind":"directory","path":".agents/skills/birdview"},{"kind":"file","path":"AGENTS.md"},{"kind":"file","path":".gitignore"}],
+      "evidence": [{"path":"scripts/birdview-monitor.mjs","line":69,"endLine":120,"note":"校验输入后原生渲染，失败保留好图；依据来源指纹提示变化。"},{"path":"scripts/birdview-monitor.mjs","line":123,"endLine":155,"note":"固定白名单路由，只绑定127.0.0.1。"},{"path":"AGENTS.md","line":13,"endLine":22,"note":"固定安装、启动、测试与公开边界。"}],
+      "status":"supported","openQuestions":["只有已引用来源受观察，新文件和语义依赖需要主动复核；重启重建观察基线不代表合规确认。","依赖内置浏览器保持可见；当前为终端进程，不是开机服务。"],"layout":{"row":4,"column":1}
+    },
+    {
+      "id": "feishu-doc", "name": "外部飞书文档", "role": "frontend", "kind": "external",
+      "responsibility": "承载教材阅读与编辑页面；本次不修改云端文档，私有文档标识与回读数据不随图谱公开。",
+      "ownership": [], "evidence": [{"path": "feishu-append.py", "line": 23, "endLine": 36, "note": "通过编辑器锚点与 paste 事件完成内容追加。"}],
+      "status": "supported", "openQuestions": [], "layout": {"row": 0, "column": 2}
+    }
+  ],
+  "relationships": [
+    {"id":"sync-reads-knowledge","from":"birdview-sync","to":"knowledge","label":"读取图谱和约束快照","kind":"dependency","visibility":"overview","evidence":[{"path":"scripts/birdview-monitor.mjs","line":89,"endLine":105,"note":"读取三个固定工件，经校验后使用Birdview原生渲染器。"}],"status":"supported","openQuestions":[]},
+    {"id": "contract-governs-guard", "from": "knowledge", "to": "runtime-guard", "label": "约束准入、预算与停止", "kind": "control", "visibility": "overview", "evidence": [{"path": "docs/specs/2026-09-25-dsh-skill-lifecycle/08-P0读取预算与终止控制契约.md", "line": 7, "endLine": 11, "note": "定义三个可测试控制接缝。"}], "status": "supported", "openQuestions": []},
+    {"id": "runner-installs-control", "from": "trial-runner", "to": "runtime-guard", "label": "导入控制层并执行预检", "kind": "dependency", "visibility": "overview", "evidence": [{"path": "skill-lifecycle/trial-home/run-probe.mjs", "line": 13, "endLine": 18, "note": "直接导入六个运行控制模块。"}], "status": "supported", "openQuestions": []},
+    {"id": "runner-loads-dsh", "from": "trial-runner", "to": "dsh-host", "label": "装配原生服务图", "kind": "request", "visibility": "overview", "evidence": [{"path": "skill-lifecycle/trial-home/run-probe.mjs", "line": 83, "endLine": 100, "note": "从外部应用加载并安装运行时插件。"}], "status": "supported", "openQuestions": []},
+    {"id": "dsh-provider", "from": "dsh-host", "to": "model-provider", "label": "显式 live 路径调用", "kind": "request", "visibility": "overview", "evidence": [{"path": "skill-lifecycle/trial-home/run-probe.mjs", "line": 93, "endLine": 102, "note": "非 skip 模式下按获准连接注册 pi-ai。"}], "status": "supported", "openQuestions": []},
+    {"id": "evaluation-reads-results", "from": "evaluation", "to": "trial-runner", "label": "读取任务记录，非自动触发", "kind": "dependency", "visibility": "overview", "evidence": [{"path": "skill-lifecycle/trial-home/a4/rounds.mjs", "line": 29, "endLine": 37, "note": "从指定证据目录读取已产出任务记录。"}], "status": "supported", "openQuestions": []},
+    {"id": "contract-governs-evaluation", "from": "knowledge", "to": "evaluation", "label": "规定对照与验收边界", "kind": "control", "visibility": "detail", "evidence": [{"path": "docs/specs/2026-09-25-dsh-skill-lifecycle/03-DSH运行与验收契约.md", "line": 25, "endLine": 44, "note": "区分内容实验、自然选择与原候选隔离。"}], "status": "supported", "openQuestions": []},
+    {"id": "tests-verify-release", "from": "trial-runner", "to": "candidate-release", "label": "离线安装与回退验证", "kind": "request", "visibility": "detail", "evidence": [{"path": "skill-lifecycle/tests/enablement.test.mjs", "line": 157, "note": "测试直接导入 applyEnable；本次未复跑。"}], "status": "supported", "openQuestions": ["安装/回退测试集尚未在本次会话重新运行；不代表实时状态。"]},
+    {"id": "tests-verify-governance", "from": "trial-runner", "to": "governance", "label": "处置链测试（需复跑）", "kind": "request", "visibility": "detail", "evidence": [{"path": "skill-lifecycle/tests/governance-ledger.test.mjs", "line": 7, "note": "测试直接导入 openGovernanceLedger 与 dispositionIdOf。"}], "status": "supported", "openQuestions": ["未在本轮执行治理回归。"]},
+    {"id": "maintenance-write-library", "from": "library-maintenance", "to": "skill-library", "label": "dry-run / 摘要闸门写回", "kind": "request", "visibility": "overview", "evidence": [{"path": "skill-lifecycle/trial-home/screening/skill-repair-writeback.mjs", "line": 60, "endLine": 121, "note": "按指定 library 根执行摘要校验、写回和备份。"}], "status": "supported", "openQuestions": []},
+    {"id": "publish-reads-teaching", "from": "feishu-publish", "to": "knowledge", "label": "读取教材 HTML", "kind": "dependency", "visibility": "overview", "evidence": [{"path": "feishu-append.py", "line": 6, "endLine": 7, "note": "输入为本地教材片段及预期末尾锚点。"}], "status": "supported", "openQuestions": []},
+    {"id": "publish-to-doc", "from": "feishu-publish", "to": "feishu-doc", "label": "定位锚点后粘贴", "kind": "request", "visibility": "overview", "evidence": [{"path": "feishu-append.py", "line": 23, "endLine": 36, "note": "检查锚点与编辑器是否处理 paste。"}], "status": "supported", "openQuestions": []}
+  ],
+  "constraints": [
+    {"id": "evidence-scope", "name": "验收必须绑定内容与环境身份", "note": "03 契约要求按实际技能内容、DSH、模型、装配、任务集和环境解释结果；历史记录不等于本次验收。", "origin": "local", "strength": "required", "applicability": "applicable", "scope": "project", "modules": [], "relationships": [], "evidence": [{"path": "docs/specs/2026-09-25-dsh-skill-lifecycle/03-DSH运行与验收契约.md", "line": 7, "note": "绑定验收对象。", "quote": "一次验收绑定：Skill 的完整内容身份、DSH 版本、模型与参数、岗位装配、工具和权限、任务集、裁判、环境初态。"}], "verification": "记录实际检查对象与范围；图谱结构通过不冒充运行行为通过。"},
+    {"id": "protect-evaluation-data", "name": "金标、凭据与跨运行材料不得泄漏", "note": "08 访问矩阵的角色隔离要求。图谱及公开 Git 排除秘密、受保护答案、连接配置与会话原文。", "origin": "local", "strength": "required", "applicability": "applicable", "scope": "project", "modules": [], "relationships": [], "evidence": [{"path": "docs/specs/2026-09-25-dsh-skill-lifecycle/08-P0读取预算与终止控制契约.md", "line": 29, "endLine": 41, "note": "访问矩阵及上下文入口隔离。"}], "verification": "检查公开清单与 Git 暂存内容；按路径和内容扫描，不回显疑似密钥。"},
+    {"id": "no-bundle-modifications", "name": "不修改 DSH 应用与全局配置", "note": "本次只接入当前项目，不能扩展为修改宿主、启用真实模型或改外部技能库。", "origin": "local", "strength": "required", "applicability": "applicable", "scope": "project", "modules": [], "relationships": [], "evidence": [{"path": "docs/specs/2026-09-25-dsh-skill-lifecycle/08-P0读取预算与终止控制契约.md", "line": 174, "note": "控制代码经可维护装配接入。", "quote": "控制代码通过可维护插件／测试装配接入，不修改app bundle；新测试岗位与配置写入必须显式批准。"}], "verification": "安装锁定在项目；不改全局 Birdview、DSH 或生产技能目录。"},
+    {"id": "real-checks-only", "name": "只报告真实执行的检查", "note": "静态事实、离线测试、原生集成与模型调用分开。Birdview 活动是声明快照，不是自动探测。", "origin": "local", "strength": "required", "applicability": "applicable", "scope": "project", "modules": [], "relationships": [], "evidence": [{"path": "docs/specs/2026-09-25-dsh-skill-lifecycle/08-P0读取预算与终止控制契约.md", "line": 110, "endLine": 112, "note": "证据分类与敏感数据边界。"}], "verification": "检查收据命令、退出码和测试数量；未跑项保持未验证。"},
+    {"id": "preserve-original", "name": "原版、候选与历史证据保持隔离", "note": "本次不整理或删除备份，不替换历史记录。发布筛选只改变 Git 纳入范围，不删除本地文件。", "origin": "local", "strength": "required", "applicability": "applicable", "scope": "project", "modules": [], "relationships": [], "evidence": [{"path": "docs/specs/2026-09-25-dsh-skill-lifecycle/03-DSH运行与验收契约.md", "line": 37, "endLine": 44, "note": "原候选隔离与内容身份约束。"}], "verification": "不执行清理、重置和业务写回；新增工件与已有业务文件分离。"},
+    {"id": "public-scope-confirmation", "name": "公开推送范围以用户确认和暂存审查为准", "note": "用户指定 skills-library 空仓库且当前远端为 public；实际技能库位于当前项目根外，不隐式扩大上传范围。", "origin": "user", "strength": "required", "applicability": "applicable", "scope": "project", "modules": [], "relationships": [], "evidence": [], "verification": "确认当前项目或外部技能库范围；逐路径暂存，核对远端与最终提交。"}
+  ]
+}

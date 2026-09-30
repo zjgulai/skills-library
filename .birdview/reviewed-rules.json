@@ -1,0 +1,39 @@
+{
+  "revision": "1005b28261b06d311ea9a8f073c46073ea5de73a",
+  "scope": "部分语义审阅：根 AGENTS.md 的 Birdview 集成规则，以及 03/08 两份核心契约的关键运行、隔离和证据约束。来源目录采集20份，未把第三方开发规范、兼容性审计技能或所有历史记录自动当成当前项目规则。11个未解析引用包含示例文件名、缺失 CONNECTORS 及主动留在本地的历史文档；未审内容与私有资料不在公开版本内。规则版本来自首次公开源码提交，不代表此前本地历史，也不证明业务合规。",
+  "groups": [
+    {"sourcePath":"AGENTS.md","category":"lifecycle","topic":{"id":"map-workflow","name":"改前看图与确认"},"rules":[
+      {"id":"rule-read-before-edit","name":"修改前核对相关实现与调用方","anchor":"read related implementations, callers and applicable design decisions before editing","explanation":"按真实来源和调用链界定改动，不用现象或文件名代替理解；只做当前需求必要改动。","condition":"获准修改代码时","applicability":"applicable","verification":"检查变更理由、相关来源与调用方，执行范围匹配的验证。"},
+      {"id":"rule-auto-map","name":"代码改动先更新改动范围图","anchor":"Use the Birdview skill before every code-changing task","explanation":"当前项目启用 auto；先复用现有图谱并展示范围，按改动组而非每行记录活动。","condition":"代码变更或明确分析受影响模块的规划","applicability":"applicable","verification":"核对当前 mapId/revision、计划事件及实际改动路径。"},
+      {"id":"rule-confirm-scope","name":"展示具体计划后等待明确确认","anchor":"After displaying the map and concrete change plan, wait for user confirmation before implementation.","explanation":"同一已确认范围不重复阻塞；重大范围变化重新展示确认。auto 和渲染成功都不是授权。","condition":"Birdview 活跃且计划进入实现时","applicability":"applicable","verification":"对照会话中的明确确认与展示范围；不伪造批准字段。"},
+      {"id":"rule-not-write-lock","name":"声明图谱不是强制写入拦截器","anchor":"This is agent guidance, not a filesystem write interceptor.","explanation":"图谱约束是协作指令；运行期权限和操作边界仍依赖实际实现。","condition":"解释 Birdview 保证或限制时","applicability":"applicable","verification":"界面与交付说明不声称图谱可以自动拦截所有写入。"}
+    ]},
+    {"sourcePath":"AGENTS.md","category":"configuration","topic":{"id":"local-integration","name":"项目级安装与同步边界"},"rules":[
+      {"id":"rule-pin-project-install","name":"固定项目版本，不改全局安装","anchor":"Birdview source is pinned to Qiuner/birdview commit","explanation":"项目目录中的完整上游包提供渲染器与规则；保留许可证和第三方声明。","condition":"安装或维护本项目 Birdview 时","applicability":"applicable","verification":"对照固定提交、安装目录、许可证和 doctor 实际结果。"},
+      {"id":"rule-monitor-truth","name":"来源变化需复核，不自动宣布合规","anchor":"Restarting or rerendering is not semantic approval; new uncited files are outside its coverage.","explanation":"监控自动重新渲染有效输入、保留最后好图并提示已引用来源变化；新文件和语义关系仍需 Agent 阅读判断。","condition":"查看或更新本地监控时","applicability":"applicable","verification":"修改引用来源应显示待复核；无效图谱应保留上次图，不清除变化提示。"},
+      {"id":"rule-no-login-service","name":"监控仅作为本地前台进程运行","anchor":"This is a foreground local process, not an installed login service.","explanation":"服务只绑定回环地址；当前运行由终端承载，不静默安装开机项或公开公网端口。","condition":"启动监控时","applicability":"applicable","verification":"核对监听地址、公开路由白名单及停止机制。"}
+    ]},
+    {"sourcePath":"AGENTS.md","category":"delivery","topic":{"id":"public-git","name":"公开发布范围"},"rules":[
+      {"id":"rule-exclude-private-data","name":"公开 Git 排除凭据与私有实验材料","anchor":"Keep credentials, provider connection files, sessions, blind mappings, held-out answers","explanation":"源码与运行期材料分开，盲判映射、终测答案、会话、连接配置及私有文档不得默认上传。","condition":"暂存、提交或推送公开仓库时","applicability":"applicable","verification":"审查暂存路径与字节内容，扫描密钥格式、私有链接及禁止目录。"},
+      {"id":"rule-preserve-local-data","name":"不删除被排除的本地材料","anchor":"Retain local excluded material; do not delete it to obtain a clean Git status.","explanation":"公开范围筛选只控制 Git 纳入，不改变本地备份、实验材料和外部技能库。","condition":"初始化与清理公开 Git 状态时","applicability":"applicable","verification":"不使用清理或重置丢弃文件；核对 .gitignore 和当前项目根边界。"},
+      {"id":"rule-no-live-tests","name":"运行型实验须另行取得出境授权","anchor":"Runtime-dependent experimental tests are separate and must not enable live model calls without a new explicit authorization.","explanation":"本次接入只执行离线回归，测试脚本存在 live 分支不等于已授权调用。","condition":"选择或执行实验测试时","applicability":"applicable","verification":"核对实际测试入口、环境开关与命令输出，不把 capture 结果当真实模型效果。"}
+    ]},
+    {"sourcePath":"docs/specs/2026-09-25-dsh-skill-lifecycle/03-DSH运行与验收契约.md","category":"testing","topic":{"id":"acceptance","name":"可复核验收"},"rules":[
+      {"id":"rule-bind-identity","name":"验收绑定技能内容与运行配置","anchor":"一次验收绑定：Skill 的完整内容身份","explanation":"模型、装配、任务集、环境或技能身份改变时重新判断证据适用性，不能沿用笼统兼容标签。","condition":"执行或引用技能验收结论时","verification":"列明完整对象身份、环境和未覆盖路径。"},
+      {"id":"rule-isolate-arms","name":"原版与候选分开装配并保持同条件","anchor":"使用同一逻辑技能名，在分开的运行区域或独立作用域装配","explanation":"两侧不能同时暴露后再靠名字暗示选择；数据、工具和初态必须可比。","condition":"内容对照实验时","verification":"检查运行作用域、实际装载来源及两臂配置身份。"},
+      {"id":"rule-scoped-claims","name":"结论必须说明范围与未覆盖部分","anchor":"禁止使用不带范围的“全平台兼容”“全部安全”“生产就绪”","explanation":"局部试验与静态图谱不支持全平台或生产稳定性保证。","condition":"交付报告或评价技能时","verification":"对照实际证据确认结论没有超出已运行的环境和任务。"}
+    ]},
+    {"sourcePath":"docs/specs/2026-09-25-dsh-skill-lifecycle/08-P0读取预算与终止控制契约.md","category":"security","topic":{"id":"execution-boundary","name":"执行与读取隔离"},"rules":[
+      {"id":"rule-exact-allowlist","name":"未知工具及路径默认拒绝","anchor":"使用精确工具标识白名单。未知工具、未知路径参数或未识别操作默认拒绝","explanation":"隔离需要在实际执行入口实现；列表、搜索、附件和资源读取也受约束。","condition":"专用受控实验作用域内","verification":"允许路径正例通过，未知工具及越界访问负例拒绝。"},
+      {"id":"rule-realpath-boundary","name":"真实路径与文件类型在读取边界核验","anchor":"读取前按真实路径、文件类型和允许根核验","explanation":"不能用字符串前缀冒充目录归属；拒绝软链接逃逸、设备和管道。","condition":"受控文件访问时","verification":"覆盖根外路径、符号链接和非普通文件，确认不返回哨兵内容。"},
+      {"id":"rule-protect-context","name":"上下文入口同样不得泄漏金标","anchor":"工具之外也要核对上下文入口","explanation":"记忆、规则、hook、附件和技能 provider 都可能绕开工具层将受保护材料送给执行者。","condition":"装配测试上下文时","verification":"核对实际模型可见材料，不只测试文件读取函数。"},
+      {"id":"rule-no-app-patch","name":"通过专用装配接入，不改应用包","anchor":"控制代码通过可维护插件／测试装配接入，不修改app bundle","explanation":"测试配置变更须明确批准；不以修改日常宿主或应用包让实验看似通过。","condition":"安装受控运行能力时","verification":"对照文件变更范围与用户批准路径。"}
+    ]},
+    {"sourcePath":"docs/specs/2026-09-25-dsh-skill-lifecycle/08-P0读取预算与终止控制契约.md","category":"lifecycle","topic":{"id":"budget-stop","name":"预算与停止恢复"},"rules":[
+      {"id":"rule-count-retries","name":"每次实际请求重试都独立计数","anchor":"每个重试是新尝试，也必须准入和计数","explanation":"对话轮数或外层步骤不等于 provider 实际请求数。","condition":"发起真实模型请求时","verification":"在实际发送边界用无网络传输桩核对重试准入和累计额度。"},
+      {"id":"rule-unknown-usage","name":"缺失用量不得按零结算","anchor":"未知用量不能按0计入","explanation":"中断与取消不能证明无费用，未知请求保留待核对状态。","condition":"预算结算或恢复时","verification":"覆盖缺失、重复、迟到用量，确认不自动释放预留额度。"},
+      {"id":"rule-stop-confirmation","name":"取消已接受不等于停止已完成","anchor":"取消请求返回accepted，只说明请求收到了","explanation":"必须关闭准入并等待实际工作收敛；无法证明时标 stop_unconfirmed。","condition":"停止与中断恢复时","verification":"覆盖取消、迟到结果与无法静止路径，不自动启动下一批。"},
+      {"id":"rule-classify-evidence","name":"静态、离线、原生与模型证据分开记录","anchor":"证据分为：静态代码事实、无模型控制测试、真实DSH工具／会话验证、获准provider请求","explanation":"模拟轨迹或模型自述不能冒充实际执行与隔离证据。","condition":"输出运行记录和验收报告时","verification":"逐项对应命令、退出码、来源与证据类型，未运行项明确标注。"}
+    ]}
+  ]
+}

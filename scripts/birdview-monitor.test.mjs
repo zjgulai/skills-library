@@ -104,7 +104,7 @@ test('rejects traversal, cross-origin requests, foreign Host headers and write m
   assert.equal((await rawRequest(monitor.url, '/', {}, 'POST')).status, 405);
 });
 
-test('does not follow symlinked map inputs or evidence outside the workspace', async t => {
+test('does not follow a symlinked map input', async t => {
   const { root, monitor } = await fixture(t);
   const outside = join(root, 'private.txt');
   await writeFile(outside, 'PRIVATE_SENTINEL');

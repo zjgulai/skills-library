@@ -1,0 +1,38 @@
+{
+  "sourceCommit": "1005b28261b06d311ea9a8f073c46073ea5de73a",
+  "birdviewUpstream": "11436ff3a6b1df70a3e17ea4e95e335a5304f730",
+  "install": {"scope": "project", "path": ".agents/skills/birdview", "mode": "auto", "globalModified": false, "doctor": "passed"},
+  "tests": [
+    {"command": "npm test", "cwd": "fixed Birdview source", "passed": 92, "failed": 0, "skipped": 0},
+    {"command": "node --test scripts/birdview-monitor.test.mjs", "passed": 5, "failed": 0, "skipped": 0},
+    {"command": "node --test skill-lifecycle/tests/requirement-intake.test.mjs skill-lifecycle/tests/governance-ledger.test.mjs skill-lifecycle/tests/enablement.test.mjs skill-lifecycle/tests/iteration-loop.test.mjs skill-lifecycle/tests/skill-repair-writeback.test.mjs", "passed": 71, "failed": 0, "skipped": 0}
+  ],
+  "map": {"mapId":"skill-lifecycle-workspace", "revision":3, "modules":13, "relationships":12, "referencedEvidencePaths":15, "missingLocally":0},
+  "constraints": {"reviewedRules":21, "reviewedSources":3, "collectedSources":20, "unresolvedReferences":11, "historyGaps":0, "semanticReview":"partial"},
+  "browser": {
+    "url":"http://127.0.0.1:4179/",
+    "inApp":"loaded; architecture/constraints and sync status verified through page state",
+    "automaticRefresh":"observed revision 2 to revision 3 without manual navigation",
+    "isolatedChrome":"architecture/all-relations/hover/constraints/coverage/source-index exercised at 1490x880 and 744x880; page errors 0",
+    "screenshots":"saved under ignored .birdview/local; in-app screenshot blocked by hidden visibilityState",
+    "visualAcceptance":"not fully confirmed; screenshot capture and semantic checks are not complete visual acceptance"
+  },
+  "publication": {
+    "sourceFiles":299,
+    "sourceBytes":3713425,
+    "secretPatternFindings":0,
+    "forbiddenPathFindings":0,
+    "externalSkillLibraryIncluded":false,
+    "excluded":"private connection configs, sessions, held-out data, blind mappings, backups, private Feishu automation/exports, historical reports, teaching HTML, original ZIP/PDF/Word materials",
+    "upstreamWhitespace":"two pre-existing whitespace warnings retained in pinned upstream source; project-owned diff check passed"
+  },
+  "limitations":[
+    "This is the governance workspace, not the external skill package library.",
+    "The monitor only watches authored artifacts and referenced sources; it does not infer semantics or enforce all agent actions.",
+    "Source drift is compared with this process's initial read; restarting is not approval.",
+    "The server is a foreground loopback process, not a login service.",
+    "Public clone excludes private/local evidence and experimental inputs; runtime-dependent full tests need separately provisioned DSH and data.",
+    "Both global and project Birdview installs exist; project instructions select the project-pinned scripts. No global skills were disabled or changed.",
+    "The rule graph is a partial review, with missing historical references explicitly disclosed."
+  ]
+}
