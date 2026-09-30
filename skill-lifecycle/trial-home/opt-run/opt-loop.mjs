@@ -161,6 +161,10 @@ async function run(argv) {
   ].join('\n');
   console.log(command);
   console.log(`\n（${mode === 'live' ? `真实请求：每执行 ≈6–10 请求 / 18–35k tokens${attempts === undefined ? '' : `（本次尝试上限 ${attempts}，属登记修订）`}；` : '零出境档；'}证据将写入 ${join(root, `evidence-r${round}`)}）`);
+  if (mode === 'live') {
+    // 113 号 §3.3-3（已确认）：void 与未覆盖读数的消耗只存在于证据内嵌账本，轮次收尾必须对账登记。
+    console.log(`（轮次收尾：python3 -B skill-lifecycle/trial-home/screening/void-audit-make.py --from ${round} --to ${round} 对账；void 与未覆盖读数必须登记入账）`);
+  }
 }
 
 async function read(argv) {
