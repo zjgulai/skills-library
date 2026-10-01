@@ -37,6 +37,7 @@ OPT_PROGRESS = [
     (SPEC / '122-r2-prep/b3-progress.json', '128-B3批次执行记录.md'),
     (SPEC / '122-r2-prep/b4-progress.json', '129-B4批次执行记录.md'),
     (SPEC / '122-r2-prep/b5-progress.json', '130-B5批次执行记录.md'),
+    (SPEC / '122-r2-prep/seo-progress.json', '132-seo收尾修复记录（gen1）.md'),
 ]
 BATCH_STATE = Path(__file__).resolve().parents[1] / 'opt-run/batch-state.json'
 SAGE_ROLES = Path('/Users/lute/project/Sage/packages/capabilities/dsh-overseas-skills/manifest/role-assignments.json')

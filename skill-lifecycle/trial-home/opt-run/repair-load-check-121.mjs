@@ -18,8 +18,11 @@ const LIB = flag('library');
 const OUT = flag('out');
 const SUB = flag('subdir') ?? '81-Skills';
 const LEDGER = flag('ledger');
+// 名字语法：`台账名` 或 `台账名=发现名`（改名件：路径仍按台账旧名解析，发现/装载按新名；
+// 2026-10-01 seo-skill v1.5 收尾引入——frontmatter 改名后发现集里是旧名不再存在）。
 const NAMES = (flag('names') ?? 'skill-evaluator,platform-price-monitor,geo-optimizer,llm-tech-research,ecommerce-monthly-review,performance-tracking')
-  .split(',').map(s => s.trim()).filter(Boolean);
+  .split(',').map(s => s.trim()).filter(Boolean)
+  .map(item => { const [lookup, discover] = item.split('='); return { lookup, name: discover ?? lookup }; });
 if (!LIB || !OUT) {
   process.stderr.write('Usage: node repair-load-check-121.mjs --library <dir> --out <json> [--names a,b,c] [--ledger <109 csv>] [--subdir <rel>]\n');
   process.exit(2);
@@ -53,9 +56,9 @@ async function resolveLedger(names) {
     byName.set(cells[nameIdx], cells[pathIdx]);
   }
   const out = [];
-  for (const name of names) {
-    const sourcePath = byName.get(name);
-    if (!sourcePath) throw new Error(`台账缺件：${name}`);
+  for (const { lookup, name } of names) {
+    const sourcePath = byName.get(lookup);
+    if (!sourcePath) throw new Error(`台账缺件：${lookup}`);
     if (sourcePath.endsWith('/SKILL.md')) {
       out.push({ name, root: join(LIB, sourcePath.replace(/\/SKILL.md$/, '')), entry: 'SKILL.md' });
     } else {
@@ -66,7 +69,7 @@ async function resolveLedger(names) {
 }
 
 const targets = LEDGER ? await resolveLedger(NAMES)
-  : NAMES.map(name => ({ name, root: join(LIB, SUB, name), entry: 'SKILL.md' }));
+  : NAMES.map(({ lookup, name }) => ({ name, root: join(LIB, SUB, lookup), entry: 'SKILL.md' }));
 
 const results = { record_type: 'l5-load-check', at: new Date().toISOString(), library: LIB,
   resolvedFrom: LEDGER ? `ledger:${LEDGER}` : `subdir:${SUB}`, items: [] };
