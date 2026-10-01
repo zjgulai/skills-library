@@ -85,6 +85,13 @@ APPEND_DOCS = {
     'gdir2-ledger-registration.json': '138-G去向二候选制作记录.md',
 }
 
+# 路径别名（改名件；140 号）：计划 op 已用新路径，分类 CSV 为冻结件（110 号「逐字节不变」证过）；
+# 只做查找别名，不改任何冻结输入。
+RENAME_ALIASES = {
+    '/Users/lute/project/AgentTools/技能库/seo-orchestrator/SKILL.md':
+        '/Users/lute/project/AgentTools/技能库/skill-zyx/SKILL.md',
+}
+
 SEV_ORDER = ('high', 'medium', 'low')
 
 
@@ -233,7 +240,7 @@ def main():
         else:
             entry = o['sourceFile']
             rel = o['entryRelPath']
-        c = class_by_path[entry]
+        c = class_by_path[RENAME_ALIASES.get(entry, entry)]
         sroles = sage_roles.get(name, [])
         class_note = ''
         if c['routeV1'] == 'role-candidate' and c['roleCandidates']:
