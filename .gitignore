@@ -40,7 +40,7 @@ library-backup-*/
 !/skill-lifecycle/trial-home/t2/
 /skill-lifecycle/trial-home/t2/*
 !/skill-lifecycle/trial-home/t2/*.mjs
+# 记录类：顶层记录文档（*.md）入库；子目录（证据/数据/候选，约 295MB 与敏感类）仍隔离
 /docs/specs/2026-09-25-dsh-skill-lifecycle/*
-!/docs/specs/2026-09-25-dsh-skill-lifecycle/03-DSH运行与验收契约.md
-!/docs/specs/2026-09-25-dsh-skill-lifecycle/08-P0读取预算与终止控制契约.md
+!/docs/specs/2026-09-25-dsh-skill-lifecycle/*.md
 /skill教材-*.html
