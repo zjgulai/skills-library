@@ -12,7 +12,7 @@
 - **一致性不变量**（写盘前断言，破坏即失败）；所有金额/数量两位小数。
 - 两个包的 CSV 由本脚本生成；包内的叙述性 MD（包说明/异常案/政策）为手写件。
 
-用法：python3 -B synth-materials-make.py [--pack g07|g04] [--out <dir>]
+用法：python3 -B synth-materials-make.py [--pack g07|g04|g03|g06|g08|g01|g02|g05|g09|g10|g11] [--out <dir>]
 """
 import argparse
 import csv
@@ -808,18 +808,380 @@ def pack_g08(out):
           f'条款 {len(clause_rows)}；数据 {len(data_rows)}（撤回即删/7 年留存）；准入 {len(access_rows)}（证据联动）；隐私 {len(pv_rows)}')
 
 
+
+# ===================== G 续补六包（141 号；2026-10-02）=====================
+# G01 三管理角色决策包 / G02 场景规则治理 / G05 独立站可售与账号健康 /
+# G09 对象与指标契约 / G10 增量实验与归因 / G11 工具契约与运行恢复。全为合成数据。
+
+G01_ROLE_FILES = [
+    ('SYNTH-01-全局组合决策包-样例.csv', 'MGT-001 全局经营', [
+        ('D-101 渠道组合重排', 'A:收缩B渠道预算/B:维持/C:加码C渠道', '约 3,000 USD', '现金占用 vs 增速', 'G07 现金视图；G10 实验', '否', '无'),
+        ('D-102 库存组合', 'A:降安全库存/B:维持/C:提升备货', '约 12,000 USD 存货', '断货风险 vs 现金', 'G04 库龄；G09 口径', '否', '无'),
+    ]),
+    ('SYNTH-02-增长组合决策包-样例.csv', 'MGT-002 增长组合', [
+        ('D-201 新品投放节奏', 'A:两新品/B:单品深挖/C:暂停新品', '约 8,000 USD', '学习速度 vs 现金', 'G10 实验设计', '否', '无'),
+        ('D-202 付费渠道配比', 'A:4:6/B:6:4/C:维持', '约 5,000 USD/月', 'CAC vs 规模', 'G05 价格与优惠；G10 归因', '是——在既定授权内', '无'),
+    ]),
+    ('SYNTH-03-治理与能力组合决策包-样例.csv', 'MGT-003 治理与能力', [
+        ('D-301 数据口径治理排期', 'A:先行GMV/B:全指标/C:暂缓', '约 1.5 人月', '一致性 vs 上线速度', 'G09 口径契约', '是——按既定规则', '无'),
+        ('D-302 审计独立复核配置', 'A:内部轮换/B:外部引入', '约 2,000 USD/季', '独立性 vs 成本', 'G02 独立性规则', '否', '自涉：拟定人参与过被审事项'),
+    ]),
+]
+G01_NOT_AUTO = [
+    ('D-101 渠道组合重排', '跨域资源取舍与经营后果', 'MGT-001（会商增长与治理）', '依赖现金与实验证据齐备'),
+    ('D-102 库存组合', '占用现金与断货风险权衡', 'MGT-001（会商供给）', '库龄与口径先行'),
+    ('D-201 新品投放节奏', '学习速度与现金约束权衡', 'MGT-002', '实验设计先行'),
+    ('D-302 审计独立复核配置', '自涉回避要求，涉人配置', 'MGT-003（自涉者回避后由替补决定）', 'G02 独立性规则'),
+]
+G01_CONFLICTS = [
+    ('C-01 十月现金分配', '增长;治理', '增长：加投付费', '治理：先保合规支出', '现金上限 20,000 USD', '按 G07 现金视图排序，MGT-001 会商仲裁'),
+    ('C-02 口径冻结时点', '治理;数据平台', '治理：尽早冻结', '平台：待修正样例齐后再冻', '冻结后变更需版本+历史留痕', 'G09 修正样例先行，两阶段切换'),
+]
+G01_STOPS = [
+    ('S-01 B 渠道收缩', 'B 渠道 90 天增长目标', '连续两窗口 CAC 超上限', '停止加投；保留自然流量与履约', '投放对账与归因报告；库存清货计划', 'MGT-002（增长）'),
+    ('S-02 表结构迁移试点', '支撑场景数据结构迁移', '变更影响面评估超授权范围', '移交数据平台治理议程', '影响面评估与只读回滚点', 'MGT-003（治理）'),
+]
+
+
+def pack_g01(out):
+    out.mkdir(parents=True, exist_ok=True)
+    total = 0
+    for fname, role, rows in G01_ROLE_FILES:
+        assert len(rows) >= 2, f'{role} 决策项不足'
+        with (out / fname).open('w', encoding='utf-8-sig', newline='') as f:
+            w = csv.writer(f)
+            w.writerow(['决策项', '选项', '资源/月', '关键取舍', '依赖(引用)', '可自动?', '自涉标注'])
+            w.writerows([list(r) for r in rows])
+        total += len(rows)
+    assert total >= 6, '三份决策包合计应 ≥6 项'
+    not_auto_keys = {r[0] for rows in [r for _, _, r in G01_ROLE_FILES] for r in rows if r[5].startswith('否')}
+    listed = {r[0] for r in G01_NOT_AUTO}
+    assert not_auto_keys == listed, f'不可自动清单与决策包不一致：{not_auto_keys ^ listed}'
+    assert any('自涉' in r[6] for _, _, rows in G01_ROLE_FILES for r in rows), '缺自涉标注'
+    assert all('回避' in r[2] or '回避' in r[3] for r in G01_NOT_AUTO if '自涉' in r[1] or '自涉' in r[3]), '自涉项须写明回避'
+    with (out / 'SYNTH-04-不可自动决策清单-样例.csv').open('w', encoding='utf-8-sig', newline='') as f:
+        w = csv.writer(f)
+        w.writerow(['决策项', '不可自动原因', '需谁决定', '依据'])
+        w.writerows([list(r) for r in G01_NOT_AUTO])
+    for r in G01_CONFLICTS:
+        assert len(r[1].split(';')) >= 2, f'{r[0]} 须涉及 ≥2 域'
+    with (out / 'SYNTH-05-跨域资源冲突-样例.csv').open('w', encoding='utf-8-sig', newline='') as f:
+        w = csv.writer(f)
+        w.writerow(['冲突', '涉及域', '诉求A', '诉求B', '约束', '仲裁路径'])
+        w.writerows([list(r) for r in G01_CONFLICTS])
+    for r in G01_STOPS:
+        assert r[4].strip(), f'{r[0]} 缺交接物'
+    with (out / 'SYNTH-06-停止与移交案例-样例.csv').open('w', encoding='utf-8-sig', newline='') as f:
+        w = csv.writer(f)
+        w.writerow(['案例', '原目标', '停止/移交原因', '处置', '交接物', '责任人'])
+        w.writerows([list(r) for r in G01_STOPS])
+    print(f'SYNTH-G01 生成完成 → {out}')
+    print(f'不变量全过：决策 {total} 项（三份≥2/份；否项与清单一致）；冲突 {len(G01_CONFLICTS)}（各≥2 域）；停止/移交 {len(G01_STOPS)}（交接物齐）')
+
+
+G02_SCENES = [
+    ('经营场景', '与GMV/客户直接相关的端到端经营链', 'A 级（全量接收）', '无明确经营对象或指标'),
+    ('控制场景', '资金、账号、合规控制类', 'A 级（全量接收）', '无控制对象与红线'),
+    ('支撑场景', '数据、工具、知识支撑类', 'B 级（按需接收）', '不服务任何已识别场景'),
+    ('实验场景', '带假设与护栏的增量探索', 'B 级（按需接收）', '无停止条件'),
+]
+G02_SAMPLING = [
+    ('A 级场景', '全量排队＋按周抽样复核', '≥8/周', '每周', '一致性<90% 触发全量复核'),
+    ('B 级场景', '分层抽样', '≥5/月', '每月', '关键项错 1 处即全量'),
+    ('口径与契约', '按变更事件触发', '每次变更', '事件驱动', '历史修正未留痕即不通过'),
+    ('资金与账号动作', '高风险全查', '100%', '每次', '任一缺证据即待补证'),
+]
+G02_INDEPENDENCE = [
+    ('审计抽样', '抽样与判定不得同人', '同人兼任', '强制轮换或外部复核'),
+    ('口径裁定', '裁定人不得参与被审实现', '自涉', '回避后由替补裁定'),
+    ('方法生效', '生效决定与制作分离', '制作人自批', '按 C-055 由有权责任方决定'),
+]
+G02_RESULTS = [
+    ('AUD-2609-01', 'A 渠道结算场景', '通过', '抽样 8/8 一致；依据 G07 对账', '—'),
+    ('AUD-2609-02', 'B 级支撑场景（迁移）', '不通过', '变更未附影响面评估', '整改后重审'),
+    ('AUD-2609-03', '促销叠加场景', '待补证', '缺优惠叠加边界样例（缺证据）', '补样例后复核'),
+]
+G02_METHOD_SCOPE = [
+    ('对账方法 v1.2', '渠道结算对账', '双渠道账单＋事件账齐备', '前提齐备即范围生效', '越界（多币种重估）退回'),
+    ('退赔判定 v1.0', '母婴售后判定', '政策矩阵与订单事实齐', '范围生效（DE/UK/US）', '政策缺口列待确认'),
+]
+
+
+def pack_g02(out):
+    out.mkdir(parents=True, exist_ok=True)
+    assert len({r[0] for r in G02_SCENES}) == 4, '四类场景齐'
+    with (out / 'SYNTH-01-场景分类与接收标准-样例.csv').open('w', encoding='utf-8-sig', newline='') as f:
+        w = csv.writer(f)
+        w.writerow(['场景类别', '判定要件', '接收级', '不接收情形'])
+        w.writerows([list(r) for r in G02_SCENES])
+    with (out / 'SYNTH-02-审计抽样规则-样例.csv').open('w', encoding='utf-8-sig', newline='') as f:
+        w = csv.writer(f)
+        w.writerow(['对象', '抽样口径', '样本量', '频次', '阈值/触发'])
+        w.writerows([list(r) for r in G02_SAMPLING])
+    assert sum(1 for r in G02_INDEPENDENCE if '不得' in r[1]) >= 2, '独立性规则 ≥2 条硬约束'
+    with (out / 'SYNTH-03-独立性规则-样例.csv').open('w', encoding='utf-8-sig', newline='') as f:
+        w = csv.writer(f)
+        w.writerow(['事项', '独立性要求', '冲突情形', '处理'])
+        w.writerows([list(r) for r in G02_INDEPENDENCE])
+    concl = {r[2] for r in G02_RESULTS}
+    assert concl == {'通过', '不通过', '待补证'}, f'审计结论三态不齐：{concl}'
+    for r in G02_RESULTS:
+        if r[2] == '待补证':
+            assert '缺' in r[3], '待补证须明示缺证据'
+    with (out / 'SYNTH-04-审计结论样例-样例.csv').open('w', encoding='utf-8-sig', newline='') as f:
+        w = csv.writer(f)
+        w.writerow(['记录号', '对象', '结论', '依据', '后续'])
+        w.writerows([list(r) for r in G02_RESULTS])
+    with (out / 'SYNTH-05-方法范围化生效样例-样例.csv').open('w', encoding='utf-8-sig', newline='') as f:
+        w = csv.writer(f)
+        w.writerow(['方法版本', '范围', '前提条件', '生效判定', '越界处理'])
+        w.writerows([list(r) for r in G02_METHOD_SCOPE])
+    print(f'SYNTH-G02 生成完成 → {out}')
+    print(f'不变量全过：场景 4 类；抽样 {len(G02_SAMPLING)}；独立性 {len(G02_INDEPENDENCE)}（含硬约束）；'
+          f'审计三态齐 {len(G02_RESULTS)}；方法范围化 {len(G02_METHOD_SCOPE)}')
+
+
+G05_PLATFORMS = [
+    ('MOCK-Store（独立站）', 'DE', 'EUR', 'MOCK-Trade GmbH', 'IOSS 低值链路见 G08'),
+    ('MOCK-Store（独立站）', 'UK', 'GBP', 'MOCK-Store Ltd', 'MTD 申报'),
+    ('MOCK-Mall', 'US', 'USD', 'MOCK-Retail LLC', '按州销售税'),
+]
+G05_FACTS = [
+    ('HM-PUMP-100', '吸力档位', '5 档', '工厂规格书 v2', '已核验'),
+    ('HM-PUMP-100', '材质（接触件）', 'PP+PPSU', '检测报告 MOCK-REACH-2408', '已核验'),
+    ('HM-PUMP-100', '噪声', '≤45 dB(A)', '出厂检测 TR-2608-03', '已核验'),
+    ('RL-BELL-01', '适用年龄', '3 月+', '待工厂确认', '待核'),
+]
+G05_PROMO = [
+    ('券', '满 59 减 5', '第 1 顺位', '与折扣互斥（二选一）'),
+    ('折扣', '9 折', '第 2 顺位', '叠加封顶：合计优惠 ≤30%'),
+    ('运费', '满 79 免运费', '第 3 顺位', '优惠后金额判定（非原价）'),
+]
+G05_CASES = [
+    ('AV-01 可售核验', '新 SKU 上架前事实核验', '材质/年龄缺 1 项', '补齐后放行；不得先上后补', 'G05 事实包'),
+    ('AV-02 支付失败', 'DE 站支付失败回落', '3DS 超时率升高', '切换通道并观察；不重复扣款', '支付日志'),
+    ('AV-03 退款异常', '部分退款到账慢', '卡组织入账 T+5', '解释口径；给查询链接', '退款记录'),
+    ('AV-04 库存不同步', '独立站与仓库存差', '缓存延迟约 15 分钟', '下单前二次校验', '库存回执'),
+]
+G05_ACCOUNT = [
+    ('P-2609-01', 'listing 图未标 warning', '已补警示文案', '整改截图与新版详情', '已完成'),
+    ('P-2609-02', '侵权投诉（已申诉）', '提交授权链证据', '品牌授权与采购凭证', '进行中'),
+]
+
+
+def pack_g05(out):
+    out.mkdir(parents=True, exist_ok=True)
+    with (out / 'SYNTH-01-平台与市场清单-样例.csv').open('w', encoding='utf-8-sig', newline='') as f:
+        w = csv.writer(f)
+        w.writerow(['平台', '站点', '货币', '运营主体', '备注'])
+        w.writerows([list(r) for r in G05_PLATFORMS])
+    assert any(r[4] == '待核' for r in G05_FACTS), '事实包须含待核项（防"先上后补"）'
+    with (out / 'SYNTH-02-商品事实包-样例.csv').open('w', encoding='utf-8-sig', newline='') as f:
+        w = csv.writer(f)
+        w.writerow(['SKU', '字段', '值', '来源', '核验状态'])
+        w.writerows([list(r) for r in G05_FACTS])
+    assert any('互斥' in r[3] for r in G05_PROMO) and any('封顶' in r[3] for r in G05_PROMO), '优惠规则须含互斥与封顶'
+    with (out / 'SYNTH-03-费用与优惠叠加规则-样例.csv').open('w', encoding='utf-8-sig', newline='') as f:
+        w = csv.writer(f)
+        w.writerow(['类型', '规则', '叠加顺序', '边界'])
+        w.writerows([list(r) for r in G05_PROMO])
+    labels = [r[1] for r in G05_CASES]
+    assert any('支付失败' in x for x in labels) and any('退款' in x for x in labels), '案例须含支付失败与退款'
+    with (out / 'SYNTH-04-可售核验与支付失败案例-样例.csv').open('w', encoding='utf-8-sig', newline='') as f:
+        w = csv.writer(f)
+        w.writerow(['案例', '情形', '现象', '处置', '依据'])
+        w.writerows([list(r) for r in G05_CASES])
+    for r in G05_ACCOUNT:
+        assert r[3].strip() and r[4] in ('已完成', '进行中'), f'{r[0]} 纠正证据/状态不合规'
+    with (out / 'SYNTH-05-账号健康与申诉-样例.csv').open('w', encoding='utf-8-sig', newline='') as f:
+        w = csv.writer(f)
+        w.writerow(['通知', '原因', '纠正动作', '证据', '状态'])
+        w.writerows([list(r) for r in G05_ACCOUNT])
+    print(f'SYNTH-G05 生成完成 → {out}')
+    print(f'不变量全过：平台 {len(G05_PLATFORMS)}；事实 {len(G05_FACTS)}（含待核）；优惠 {len(G05_PROMO)}（互斥+封顶）；'
+          f'案例 {len(G05_CASES)}（支付/退款齐）；账号 {len(G05_ACCOUNT)}（证据联动）')
+
+G09_OBJECTS = [
+    ('主体', 'MOCK-Trade GmbH', '拥有 账号×2／店铺×1', '税务实体见 G08'),
+    ('账号', 'ACC-M-001（MOCK-Mall）', '归属 主体；绑定 店铺×1', ''),
+    ('店铺', 'SHOP-DE-01', '归属 账号；上架 商品', ''),
+    ('商品', 'ITEM-PUMP-100', '对应 SPU×1', ''),
+    ('SPU', 'SPU-PUMP-100', '聚合 SKU×2', '颜色差异'),
+    ('SKU', 'SKU-PUMP-100-W', '最小库存/销售单元', ''),
+]
+G09_METRICS = [
+    ('GMV', '订单含税成交额（退款/取消前）', 'MGT-001（经营）', '经营看板', 'v1'),
+    ('净收入', 'GMV−退款−平台费＋冲回', '财务（合账）', '结算与报表', 'v1'),
+    ('利润', '净收入−商品成本−履约−投放', '财务', '经营复盘', 'v1'),
+    ('净贡献', '利润−固定分摊', '财务', '组合决策', 'v1（试）'),
+]
+G09_FIXES = [
+    ('F-2609-01 GMV 口径', '含税 GMV', '去税净额', '经营主口径＝含税（报表另列净额）', '历史 8 月报表按同口径重述', '2026-10-01 起'),
+    ('F-2609-02 SKU 归并', '颜色未拆分', '按颜色拆分', '拆分为 2 SKU，历史按旧键映射', '映射表留痕', '2026-10-01 起'),
+]
+G09_SLA = [
+    ('空值率', '关键字段 ≤0.5%', '每日', '超阈告警并回溯来源'),
+    ('零填充嫌疑', '0 值连续 ≥3 列为排查对象', '每日', '人工核验后入更正'),
+    ('口径漂移', '同指标多版本并存即预警', '变更触发', '按 G09 修正样例留痕'),
+]
+
+
+def pack_g09(out):
+    out.mkdir(parents=True, exist_ok=True)
+    kinds = {r[0] for r in G09_OBJECTS}
+    assert kinds == {'主体', '账号', '店铺', '商品', 'SPU', 'SKU'}, f'对象字典缺类：{kinds}'
+    with (out / 'SYNTH-01-对象字典-样例.csv').open('w', encoding='utf-8-sig', newline='') as f:
+        w = csv.writer(f)
+        w.writerow(['对象', '示例', '关系', '备注'])
+        w.writerows([list(r) for r in G09_OBJECTS])
+    assert len(G09_METRICS) >= 3 and all(r[4].startswith('v1') for r in G09_METRICS), '指标口径须含版本'
+    with (out / 'SYNTH-02-指标口径与所有者-样例.csv').open('w', encoding='utf-8-sig', newline='') as f:
+        w = csv.writer(f)
+        w.writerow(['指标', '口径定义', '所有者', '用途', '版本'])
+        w.writerows([list(r) for r in G09_METRICS])
+    assert any('重述' in r[4] or '留痕' in r[4] for r in G09_FIXES), '修正须含历史处置'
+    with (out / 'SYNTH-03-冲突与历史修正样例-样例.csv').open('w', encoding='utf-8-sig', newline='') as f:
+        w = csv.writer(f)
+        w.writerow(['冲突', '口径A', '口径B', '裁定', '更正与历史', '生效'])
+        w.writerows([list(r) for r in G09_FIXES])
+    with (out / 'SYNTH-04-数据质量SLA-样例.csv').open('w', encoding='utf-8-sig', newline='') as f:
+        w = csv.writer(f)
+        w.writerow(['检查项', '阈值', '频次', '处置'])
+        w.writerows([list(r) for r in G09_SLA])
+    print(f'SYNTH-G09 生成完成 → {out}')
+    print(f'不变量全过：对象 6 类齐；指标 {len(G09_METRICS)}（含版本）；修正 {len(G09_FIXES)}（历史留痕）；SLA {len(G09_SLA)}')
+
+
+G10_EXPERIMENTS = [
+    ('E-2609-01', '主图改版', '提升详情转化', '14 天/两臂各 50%（分层随机）', '随机', '48,200', '3.1%→3.4%', '0', '无', '增量疑似 +0.3pp（置信区间含 0）'),
+    ('E-2609-02', '优惠券门槛', '提客单', '21 天/门槛 59 vs 49', '随机', '31,500', '转化 -0.4pp；客单 +6.2%', '券成本 1,240 USD', '毛利护栏', '净贡献 +3.1%（护栏内）'),
+    ('E-2609-03', '站外达人跳转', '拉新', '30 天/自然对照', '非随机', '19,400', '跳转转化 1.8%', '8,000 USD', 'CAC ≤ 25', '不作增量强结论（混杂）'),
+    ('E-2609-04', '仓库分流', '降履约费', '14 天/两仓对照', '随机', '12,300 单', '履约费 -0.42 USD/单', '—', '时效不劣化', '采用（范围：US 西岸仓）'),
+    ('E-2609-05', '邮件频次', '提复购', '21 天/降频对照', '随机', '4,100', '开信率方差大', '—', '—', '样本不足，无效'),
+]
+G10_INVALID = [
+    ('E-2609-01', '置信区间含 0', '两臂差 -0.1~0.7pp', '不作增量成立结论', '延长观察或复跑'),
+    ('E-2609-03', '非随机＋同期活动混杂', '对照基线不平行', '仅作方向参考', '需随机化或差分设计'),
+    ('E-2609-05', '样本不足', '开信率方差大', '无效；不进采用通道', '扩样本或降频次试验'),
+]
+G10_ADOPT = [
+    ('E-2609-02', '采用（范围化）', 'DE 站新客券门槛 49', '净贡献 +3.1% 且护栏内', '毛利护栏持续监控'),
+    ('E-2609-04', '采用', 'US 西岸仓分流', '履约费降且时效不劣', '时效 SLA 监控'),
+    ('E-2609-01', '继续观察', '—', '增量不确定', '复跑或延长窗口'),
+]
+G10_LIMITS = [
+    ('达人投放', '平台口径归因偏满', '增量 ROI 类结论', '自然流量与活动叠加'),
+    ('站内推荐位', '位置偏差', 'CTR 对比结论', '库存与价格差异'),
+    ('季节性窗口', '同比混季节', '同比提升类结论', '宏观与投放同步变化'),
+]
+
+
+def pack_g10(out):
+    out.mkdir(parents=True, exist_ok=True)
+    mech = {r[4] for r in G10_EXPERIMENTS}
+    assert '随机' in mech and '非随机' in mech, '机制须含随机与非随机'
+    ids = {r[0] for r in G10_EXPERIMENTS}
+    assert {r[0] for r in G10_INVALID} <= ids and {r[0] for r in G10_ADOPT} <= ids, '反例/采用记录须对应实验'
+    with (out / 'SYNTH-01-实验设计与结果-样例.csv').open('w', encoding='utf-8-sig', newline='') as f:
+        w = csv.writer(f)
+        w.writerow(['实验号', '名称', '目标', '样本', '机制', '曝光量', '转化/结果值', '成本', '护栏', '结果'])
+        w.writerows([list(r) for r in G10_EXPERIMENTS])
+    for r in G10_INVALID:
+        assert '不作' in r[3] or '无效' in r[3] or '仅作' in r[3], f'{r[0]} 无效结论表述不合规'
+    with (out / 'SYNTH-02-无效与反例-样例.csv').open('w', encoding='utf-8-sig', newline='') as f:
+        w = csv.writer(f)
+        w.writerow(['实验号', '无效原因', '证据', '结论', '教训'])
+        w.writerows([list(r) for r in G10_INVALID])
+    assert all(r[2].strip() for r in G10_ADOPT), '采用决定须写明范围'
+    with (out / 'SYNTH-03-采用决定样例-样例.csv').open('w', encoding='utf-8-sig', newline='') as f:
+        w = csv.writer(f)
+        w.writerow(['实验号', '决定', '范围', '依据', '前提/护栏'])
+        w.writerows([list(r) for r in G10_ADOPT])
+    with (out / 'SYNTH-04-归因局限说明-样例.csv').open('w', encoding='utf-8-sig', newline='') as f:
+        w = csv.writer(f)
+        w.writerow(['场景', '已知局限', '受影响的结论类型', '替代解释'])
+        w.writerows([list(r) for r in G10_LIMITS])
+    print(f'SYNTH-G10 生成完成 → {out}')
+    print(f'不变量全过：实验 {len(G10_EXPERIMENTS)}（随机/非随机齐）；反例 {len(G10_INVALID)}（结论合规）；'
+          f'采用 {len(G10_ADOPT)}（范围齐）；归因局限 {len(G10_LIMITS)}')
+
+
+G11_CONTRACTS = [
+    ('T-101 库存查询', '读', '库存/批次', '—（只读）', '查询回执（快照时间戳）', '无需审批'),
+    ('T-102 订单查询', '读', '订单/退款', '—（只读）', '查询回执', '无需审批'),
+    ('T-201 结算导出', '读', '结算账单', '—（只读）', '导出清单＋sha256', '无需审批（敏感字段脱敏）'),
+    ('T-301 改价', '写', 'listing 价格', 'plan-id（幂等）', '变更回执（前后价）', '需 MGT-002 授权'),
+    ('T-302 退款处置', '写', '订单退款', 'case-id', '退款回执（金额/渠道）', '按 G06 判定＋主管复核'),
+    ('T-401 账号申诉提交', '写', '平台申诉', 'dispute-id', '提交回执（编号/状态）', '需合规会签'),
+]
+G11_IDEMPOTENCY = [
+    ('重复提交', '相同幂等键仅生效一次', '返回首次回执', '键＋时间戳留痕'),
+    ('取消中', '取消为请求语义', '未完成前状态＝取消中', '状态流转留痕'),
+    ('未知结果', '超时未达视为未知', '先只读核验再决定重试', '未知标记不自动重试'),
+    ('重试', '仅同幂等键允许重试', '重试前后同键', '重试计数留痕'),
+]
+G11_ACCESS = [
+    ('MGT-002', '改价（T-301）', '带额度授权', '在额定价格带内', '季审撤销'),
+    ('客服主管', '退款（T-302）', '判定＋复核', '按 G06 政策', '月度重签'),
+    ('合规', '申诉（T-401）', '会签授权', '涉平台监管事项', '事件触发回收'),
+    ('数据平台', '结算导出（T-201）', '只读授权', '脱敏导出', '季审'),
+]
+G11_RECOVERY = [
+    ('R-01 批量任务中断', '导出到一半会话断开', '按清单校验后断点续跑', '分片 hash 对齐后去重', '完成；无重复数据'),
+    ('R-02 改价部分生效', '网关超时未知', '只读核验实际价格→按需同幂等键重试', '前后价回执比对', '收敛；仅一次生效'),
+    ('R-03 会话过期', '长任务执行中凭据过期', '失败即停，重新取号重跑（新 plan-id）', '旧键作废留痕', '重跑完成；旧键无副作用'),
+]
+
+
+def pack_g11(out):
+    out.mkdir(parents=True, exist_ok=True)
+    reads = [r for r in G11_CONTRACTS if r[1] == '读']
+    writes = [r for r in G11_CONTRACTS if r[1] == '写']
+    assert len(reads) >= 3 and all('无需审批' in r[5] for r in reads), '读类契约须 ≥3 且无需审批'
+    assert writes and all('无需审批' not in r[5] for r in writes), '写类契约须有审批要求'
+    with (out / 'SYNTH-01-工具契约清单-样例.csv').open('w', encoding='utf-8-sig', newline='') as f:
+        w = csv.writer(f)
+        w.writerow(['工具/动作', '读/写', '对象', '幂等键', '期望回执', '审批要求'])
+        w.writerows([list(r) for r in G11_CONTRACTS])
+    assert any('未知结果' in r[0] and '只读核验' in r[2] for r in G11_IDEMPOTENCY), '未知结果语义须含只读核验'
+    with (out / 'SYNTH-02-幂等取消与未知结果语义-样例.csv').open('w', encoding='utf-8-sig', newline='') as f:
+        w = csv.writer(f)
+        w.writerow(['情形', '语义', '处置', '留痕'])
+        w.writerows([list(r) for r in G11_IDEMPOTENCY])
+    with (out / 'SYNTH-03-访问授权规则-样例.csv').open('w', encoding='utf-8-sig', newline='') as f:
+        w = csv.writer(f)
+        w.writerow(['角色', '工具/数据', '授权类型', '前提', '期限/撤销'])
+        w.writerows([list(r) for r in G11_ACCESS])
+    assert all(r[3].strip() for r in G11_RECOVERY), '恢复案例须含幂等核验'
+    with (out / 'SYNTH-04-运行恢复案例-样例.csv').open('w', encoding='utf-8-sig', newline='') as f:
+        w = csv.writer(f)
+        w.writerow(['事件', '现象', '恢复步骤', '幂等核验', '结果'])
+        w.writerows([list(r) for r in G11_RECOVERY])
+    print(f'SYNTH-G11 生成完成 → {out}')
+    print(f'不变量全过：契约 {len(G11_CONTRACTS)}（读 {len(reads)} 免审批/写 {len(writes)} 有审批）；'
+          f'幂等语义 {len(G11_IDEMPOTENCY)}（含未知结果）；授权 {len(G11_ACCESS)}；恢复 {len(G11_RECOVERY)}（幂等核验齐）')
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--pack', choices=['g07', 'g04', 'g03', 'g06', 'g08'], default='g07')
+    parser.add_argument('--pack', choices=['g07', 'g04', 'g03', 'g06', 'g08', 'g01', 'g02', 'g05', 'g09', 'g10', 'g11'], default='g07')
     parser.add_argument('--out', default=None)
     args = parser.parse_args()
     default_out = {'g07': 'skill-lifecycle/trial-home/intake/SYNTH-G07',
                    'g04': 'skill-lifecycle/trial-home/intake/SYNTH-G04',
                    'g03': 'skill-lifecycle/trial-home/intake/SYNTH-G03',
                    'g06': 'skill-lifecycle/trial-home/intake/SYNTH-G06',
-                   'g08': 'skill-lifecycle/trial-home/intake/SYNTH-G08'}[args.pack]
+                   'g08': 'skill-lifecycle/trial-home/intake/SYNTH-G08',
+                   'g01': 'skill-lifecycle/trial-home/intake/SYNTH-G01',
+                   'g02': 'skill-lifecycle/trial-home/intake/SYNTH-G02',
+                   'g05': 'skill-lifecycle/trial-home/intake/SYNTH-G05',
+                   'g09': 'skill-lifecycle/trial-home/intake/SYNTH-G09',
+                   'g10': 'skill-lifecycle/trial-home/intake/SYNTH-G10',
+                   'g11': 'skill-lifecycle/trial-home/intake/SYNTH-G11'}[args.pack]
     out = Path(args.out or default_out).resolve()
-    {'g04': pack_g04, 'g03': pack_g03, 'g06': pack_g06, 'g08': pack_g08}.get(args.pack, pack_g07)(out)
+    {'g04': pack_g04, 'g03': pack_g03, 'g06': pack_g06, 'g08': pack_g08,
+     'g01': pack_g01, 'g02': pack_g02, 'g05': pack_g05, 'g09': pack_g09,
+     'g10': pack_g10, 'g11': pack_g11}.get(args.pack, pack_g07)(out)
 
 
 if __name__ == '__main__':
