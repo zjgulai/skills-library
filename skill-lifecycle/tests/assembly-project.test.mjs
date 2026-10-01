@@ -116,6 +116,95 @@ test('flat 形态：apply 落位、内容不同即冲突', async (t) => {
   assert.equal(await readOrNull(join(targetRoot, 'leadership-strategy-playbook.md')), 'tampered\n');
 });
 
+async function flatToDirOp({ sourceDir, name, flatRelPath, flatBody }) {
+  const { files } = await walkFiles(sourceDir);
+  return {
+    opId: 'op-001', mode: 'flat-to-dir', group: 'C', name, sourceKind: 'qoder',
+    sourceDir, entryRelPath: `${name}/SKILL.md`,
+    entrySha256: files.find(file => file.relPath === 'SKILL.md').sha256,
+    route: 'role-candidate', sourceFiles: files,
+    sourceBytes: files.reduce((sum, file) => sum + file.bytes, 0),
+    sourceDigest: manifestDigest(files),
+    expectFlatRelPath: flatRelPath, expectFlatSha256: sha256(flatBody),
+  };
+}
+
+async function flatToDirFixture(t, flatBody = 'old flat body\n') {
+  const { base, src, targetRoot } = await fixture(t);
+  const name = 'leadership-strategy-playbook';
+  const sourceDir = join(src, name);
+  await mkdir(join(sourceDir, 'references'), { recursive: true });
+  await writeFile(join(sourceDir, 'SKILL.md'), '# leadership v2\n');
+  await writeFile(join(sourceDir, 'references', 'full-playbook.md'), 'templates\n');
+  await mkdir(targetRoot, { recursive: true });
+  await writeFile(join(targetRoot, `${name}.md`), flatBody);
+  const op = await flatToDirOp({ sourceDir, name, flatRelPath: `${name}.md`, flatBody });
+  return { base, targetRoot, name, sourceDir, op };
+}
+
+test('flat-to-dir：dry-run 报 planned-update；apply 换形成目录、平铺归档、回执 updated', async (t) => {
+  const { base, targetRoot, name, op } = await flatToDirFixture(t);
+  const plan = makePlan(targetRoot, [op], 'tfd1');
+  const dry = await projectToAssembly({ plan, receiptPath: join(base, 'r1.json') });
+  assert.equal(dry.results[0].status, 'planned-update');
+  assert.equal(await readOrNull(join(targetRoot, `${name}.md`)), 'old flat body\n', 'dry-run 不许动平铺');
+  assert.equal(await exists(join(targetRoot, name)), false, 'dry-run 不许建目录');
+  assert.equal(await exists(join(base, 'library', '_assembly-history')), false, 'dry-run 不许建归档');
+
+  const applied = await projectToAssembly({ plan, apply: true, receiptPath: join(base, 'r1.json') });
+  assert.equal(applied.summary.updated, 1);
+  assert.equal(await readOrNull(join(targetRoot, `${name}.md`)), null, '平铺必须已被替换走');
+  assert.equal(await readOrNull(join(targetRoot, name, 'SKILL.md')), '# leadership v2\n');
+  assert.equal(await readOrNull(join(targetRoot, name, 'references', 'full-playbook.md')), 'templates\n');
+  assert.equal(await exists(join(targetRoot, '_assembly-history')), false, '归档是装配根兄弟目录');
+  const hist = join(base, 'library', '_assembly-history', name, `${op.expectFlatSha256.slice(0, 12)}.md`);
+  assert.equal(await readOrNull(hist), 'old flat body\n', '归档必须是旧平铺原件');
+  const meta = JSON.parse(await readFile(join(targetRoot, name, '.assembly-meta.json'), 'utf8'));
+  assert.equal(meta.replacedDigest, op.expectFlatSha256.slice(0, 16));
+  const receipt = JSON.parse(await readFile(join(base, 'r1.json'), 'utf8'));
+  assert.equal(receipt.summary.updated, 1);
+});
+
+test('flat-to-dir 幂等：换形后重跑 already-present，不再动盘', async (t) => {
+  const { base, targetRoot, op, name } = await flatToDirFixture(t);
+  const plan = makePlan(targetRoot, [op], 'tfd2');
+  await projectToAssembly({ plan, apply: true, receiptPath: join(base, 'r1.json') });
+  const again = await projectToAssembly({ plan, apply: true, receiptPath: join(base, 'r2.json') });
+  assert.equal(again.summary.alreadyPresent, 1);
+  assert.equal(await exists(join(base, 'r2.json')), false, '无落位不写回执');
+  assert.equal(await readOrNull(join(targetRoot, name, 'SKILL.md')), '# leadership v2\n');
+});
+
+test('flat-to-dir 闸门：平铺被改 FLAT_CHANGED、平铺缺失 FLAT_MISSING、源漂移 SOURCE_CHANGED', async (t) => {
+  const { base, targetRoot, op, name, sourceDir } = await flatToDirFixture(t);
+  await writeFile(join(targetRoot, `${name}.md`), 'tampered\n');
+  const changed = await projectToAssembly({ plan: makePlan(targetRoot, [op], 'tfd3'),
+    apply: true, receiptPath: join(base, 'r1.json') });
+  assert.equal(changed.results[0].reason, 'FLAT_CHANGED');
+  assert.equal(await exists(join(targetRoot, name)), false, '拒收后不得落目录');
+  assert.equal(await readOrNull(join(targetRoot, `${name}.md`)), 'tampered\n', '拒收后平铺保持原样');
+
+  await rm(join(targetRoot, `${name}.md`));
+  const missing = await projectToAssembly({ plan: makePlan(targetRoot, [op], 'tfd4') });
+  assert.equal(missing.results[0].reason, 'FLAT_MISSING');
+
+  await writeFile(join(targetRoot, `${name}.md`), 'old flat body\n');
+  await writeFile(join(sourceDir, 'SKILL.md'), '# drifted\n');
+  const drifted = await projectToAssembly({ plan: makePlan(targetRoot, [op], 'tfd5') });
+  assert.equal(drifted.results[0].reason, 'SOURCE_CHANGED');
+});
+
+test('flat-to-dir 闸门：目录目标已存在且非等值时 TARGET_CONFLICT，平铺不受动', async (t) => {
+  const { base, targetRoot, op, name } = await flatToDirFixture(t);
+  await mkdir(join(targetRoot, name), { recursive: true });
+  await writeFile(join(targetRoot, name, 'SKILL.md'), 'squatter\n');
+  const report = await projectToAssembly({ plan: makePlan(targetRoot, [op], 'tfd6'),
+    apply: true, receiptPath: join(base, 'r1.json') });
+  assert.equal(report.results[0].reason, 'TARGET_CONFLICT');
+  assert.equal(await readOrNull(join(targetRoot, `${name}.md`)), 'old flat body\n');
+  assert.equal(await readOrNull(join(targetRoot, name, 'SKILL.md')), 'squatter\n');
+});
+
 test('PLAN_DIGEST_MISMATCH：计划被改而不重算摘要即拒', async (t) => {
   const { src, targetRoot } = await fixture(t);
   const plan = makePlan(targetRoot, [await dirOp({ sourceDir: join(src, 'ad-creative'), name: 'ad-creative' })]);

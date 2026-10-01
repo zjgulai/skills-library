@@ -33,6 +33,13 @@ library-backup-*/
 !/skill-lifecycle/trial-home/probe-b/
 /skill-lifecycle/trial-home/probe-b/*
 !/skill-lifecycle/trial-home/probe-b/probe-b-read.mjs
+!/skill-lifecycle/trial-home/r5/
+/skill-lifecycle/trial-home/r5/*
+!/skill-lifecycle/trial-home/r5/*.mjs
+!/skill-lifecycle/trial-home/r5/*.py
+!/skill-lifecycle/trial-home/t2/
+/skill-lifecycle/trial-home/t2/*
+!/skill-lifecycle/trial-home/t2/*.mjs
 /docs/specs/2026-09-25-dsh-skill-lifecycle/*
 !/docs/specs/2026-09-25-dsh-skill-lifecycle/03-DSH运行与验收契约.md
 !/docs/specs/2026-09-25-dsh-skill-lifecycle/08-P0读取预算与终止控制契约.md

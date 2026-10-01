@@ -70,23 +70,33 @@ async function stage(argv) {
   // 8 次尝试全花在逐个读文件上、写不出报告）。合并上限**按执行器的总输入预算反推**：
   // probe-b 的 openFiles 对"全部输入文件累计"限 maxInputBytes=65536（实测：73k 的包会当场
   // INPUT_TOO_LARGE），所以 合并件 ≤ 总预算 − SKILL.md − 清单 − 2k 余量（按字节算，中文 3 字节）。
-  const TOTAL_INPUT_BUDGET = 196608;   // 与 probe-b 的 maxInputBytes 一致；D73-amend-05（128→192KiB，待追认）
-  const FIXED_INPUT_RESERVE = 12000;   // task.md＋评测器技能文件（≈7.4k）＋余量的固定占用
+  const TOTAL_INPUT_BUDGET = 196608;   // 与 probe-b 的 maxInputBytes 一致；D73-amend-05（128→192KiB；D105 已追认）
+  const FIXED_INPUT_RESERVE = 14000;   // task.md＋评测器技能文件（实测 7,985B）＋余量的固定占用（12000 曾令 76 文件小包贴限件 INPUT_TOO_LARGE：判者 7,985＋task.md ≈500 超出估算）
   const skillBytes = digests['SKILL.md'] === undefined ? 0 : (await readFile(join(material, 'SKILL.md'))).length;
   const mergedLimit = TOTAL_INPUT_BUDGET - skillBytes - Buffer.byteLength(listText) - FIXED_INPUT_RESERVE;
   const merged = [];
   let mergedBytes = 0;
   const unmerged = [];
-  for (const relPath of Object.keys(digests).sort()) {
-    if (relPath === 'SKILL.md' || relPath === 'package-files.txt') continue;
+  const mergedNames = Object.keys(digests).sort()
+    .filter(relPath => relPath !== 'SKILL.md' && relPath !== 'package-files.txt');
+  // 未并入的占位符自身也占 package-contents.md 的字节（huashu-design r268：107 处 ≈8.6KB——
+  // 曾击穿固定余量、运行期 INPUT_TOO_LARGE）。两遍式：先按「剩余文件全部出占位符」预留，
+  // 并入内容时扣除本文件占位符后仍须 ≤ mergedLimit，保证最终 mergedBytes（内容＋占位符）不超限。
+  const placeholderText = relPath => `\n\n## ${relPath}\n\n（超出合并上限，未并入）`;
+  let reserve = 0;
+  for (const relPath of mergedNames) reserve += Buffer.byteLength(placeholderText(relPath));
+  for (const relPath of mergedNames) {
     const body = await readFile(join(material, relPath));
-    if (mergedBytes + body.length > mergedLimit) {
-      merged.push(`\n\n## ${relPath}\n\n（超出合并上限，未并入）`);
+    const ph = Buffer.byteLength(placeholderText(relPath));
+    if (mergedBytes + body.length + (reserve - ph) <= mergedLimit) {
+      mergedBytes += body.length;
+      merged.push(`\n\n## ${relPath}\n\n${body.toString('utf8')}`);
+    } else {
+      mergedBytes += ph;
+      merged.push(placeholderText(relPath));
       unmerged.push(relPath);
-      continue;
     }
-    mergedBytes += body.length;
-    merged.push(`\n\n## ${relPath}\n\n${body.toString('utf8')}`);
+    reserve -= ph;
   }
   await writeFile(join(material, 'package-contents.md'),
     `# 包内文件内容合并（供评估阅读）\n${merged.join('')}\n`);

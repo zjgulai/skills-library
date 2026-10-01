@@ -9,7 +9,20 @@ import { openBudget } from '../control/budget-ledger.mjs';
 import { installTrialControl } from '../control/dsh-plugin.mjs';
 import { makeTempCase } from './fixtures.mjs';
 
-const APP = '/Applications/DSH Desktop.app/Contents/Resources/app';
+// 运行时基座（2026-10-01 切换 Sage）：T_APP_ROOT 覆盖 → Sage 内置 harness 构建 → Sage 开发树（dist 重建窗口兜底）→ 旧应用路径；找不到即显式失败。
+const APP = (() => {
+  const fs = process.getBuiltinModule('node:fs');
+  const path = process.getBuiltinModule('node:path');
+  const candidates = [
+    process.env.T_APP_ROOT,
+    '/Users/lute/project/Sage/vendor/dsh-desktop/dsh-plugin-desktop/dist/mac-arm64/DSH Desktop.app/Contents/Resources/app',
+    '/Users/lute/project/Sage/vendor/dsh-desktop/dsh-plugin-desktop',
+    '/Applications/DSH Desktop.app/Contents/Resources/app',
+  ].filter(Boolean);
+  const found = candidates.find(candidate => fs.existsSync(path.join(candidate, 'package.json')));
+  if (!found) throw new Error(`harness app root 未找到（试过：${candidates.join(' | ')}；可用 T_APP_ROOT 指定）`);
+  return found;
+})();
 const EXPECTED_DSH_VERSION = '0.1.5-rc.2';
 const MODEL = { provider: 'trial-provider', id: 'trial-model', name: 'Trial Model',
   context: { contextWindow: 8000 }, defaultMaxTokens: 32 };

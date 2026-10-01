@@ -24,7 +24,22 @@ import { noSkillDigest, toolScopeFor } from '../control/arm-scope.mjs';
  * 三档门禁（沿用既有纪律）：capture（脚本化 adapter，零出境；顺带证明技能目录确实进了上下文）
  * → wake-check（挂真实路由，适配器在派发前拒绝一切请求，零出境）→ live（真实请求，按次授权）。
  */
-const APP = '/Applications/DSH Desktop.app/Contents/Resources/app';
+// 判者运行时基座（2026-10-01）：用户主用 Sage；/Applications/DSH Desktop.app 已移除。
+// 优先 T_APP_ROOT 覆盖；否则 Sage 仓内置的 harness 构建；再退化到旧应用路径。找不到即显式失败（不静默换基座）。
+// 运行时基座（2026-10-01 切换 Sage）：T_APP_ROOT 覆盖 → Sage 内置 harness 构建 → Sage 开发树（dist 重建窗口兜底）→ 旧应用路径；找不到即显式失败。
+const APP = (() => {
+  const fs = process.getBuiltinModule('node:fs');
+  const path = process.getBuiltinModule('node:path');
+  const candidates = [
+    process.env.T_APP_ROOT,
+    '/Users/lute/project/Sage/vendor/dsh-desktop/dsh-plugin-desktop/dist/mac-arm64/DSH Desktop.app/Contents/Resources/app',
+    '/Users/lute/project/Sage/vendor/dsh-desktop/dsh-plugin-desktop',
+    '/Applications/DSH Desktop.app/Contents/Resources/app',
+  ].filter(Boolean);
+  const found = candidates.find(candidate => fs.existsSync(path.join(candidate, 'package.json')));
+  if (!found) throw new Error(`harness app root 未找到（试过：${candidates.join(' | ')}；可用 T_APP_ROOT 指定）`);
+  return found;
+})();
 const TRIAL_HOME = join(import.meta.dirname, '..', 'trial-home');
 const PROBE_HOME = join(TRIAL_HOME, 'probe-b');
 const STORE = join(homedir(), '.dsh', '.credentials.yaml');
@@ -32,7 +47,7 @@ const STORE = join(homedir(), '.dsh', '.credentials.yaml');
 // （首轮整批因此空转，见 60 号）。安装形态与库内原件的差异仅 frontmatter 的 name 一行，回执在 install-form/receipt.json。
 const FROZEN = ['skill-evaluator'];
 const RUN_LIMITS = { maxAttempts: Number(process.env.T_RUN_ATTEMPTS ?? 8), maxOutputTokensPerAttempt: 8192, maxRequestBytes: 262144,
-  // 单轮 token 软停：大材料包按轮次由 T_RUN_TOKENS 覆盖（默认 40000；登记 D73-amend-04，待追认）
+  // 单轮 token 软停：大材料包按轮次由 T_RUN_TOKENS 覆盖（默认 40000；D73-amend-04，D105 已追认）
   observedTokenStop: Number(process.env.T_RUN_TOKENS ?? 40000), batchDeadlineMs: 1800000, attemptTimeoutMs: 120000 };
 const GROUP_LIMITS = {
   maxAttempts: Number(process.env.T_GROUP_ATTEMPTS ?? 150),

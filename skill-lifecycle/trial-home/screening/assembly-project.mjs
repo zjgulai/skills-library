@@ -71,6 +71,9 @@ export function computePlanDigest(plan) {
       const fields = [op.opId, op.mode, op.name, op.sourceDir, op.sourceDigest];
       if (typeof op.expectTargetDigest === 'string') fields.push(op.expectTargetDigest);
       lines.push(fields.join('\t'));
+    } else if (op.mode === 'flat-to-dir') {
+      lines.push([op.opId, op.mode, op.name, op.sourceDir, op.sourceDigest,
+        op.expectFlatSha256].join('\t'));
     } else {
       lines.push([op.opId, op.mode, op.name, op.sourceFile, op.sourceSha256].join('\t'));
     }
@@ -113,6 +116,8 @@ export async function projectToAssembly({ plan, apply = false, receiptPath = nul
       await projectDirOp({ op, record, plan, apply, targetRoot: plan.targetRoot, receiptRef, results });
     } else if (op.mode === 'flat') {
       await projectFlatOp({ op, record, plan, apply, targetRoot: plan.targetRoot, results });
+    } else if (op.mode === 'flat-to-dir') {
+      await projectFlatToDirOp({ op, record, plan, apply, targetRoot: plan.targetRoot, receiptRef, results });
     } else {
       results.push({ ...record, status: 'rejected', reason: `INVALID_OP_MODE: ${op.mode}` });
     }
@@ -326,6 +331,101 @@ async function projectFlatOp({ op, record, plan, apply, targetRoot, results }) {
     return;
   }
   results.push({ ...record, status: 'applied', bytes: source.length, files: 1 });
+}
+
+/**
+ * `flat-to-dir`：受控替换——把平铺 `<name>.md` 换成目录 `<name>/`。
+ * 闸门：源目录清单逐字节一致（防源漂移）；平铺目标必须存在且 sha256 与计划一致（防换错对象）；
+ * 目录目标不得已存在（已等且平铺已清 ⇒ already-present 幂等）。apply 顺序＝档案化平铺 → 落目录 → 双向核对；
+ * 任一步失败回滚平铺。旧平铺进 `<historyRoot>/<name>/<digest12>.md`（等价档复用）。
+ */
+async function projectFlatToDirOp({ op, record, plan, apply, targetRoot, receiptRef, results }) {
+  const sourceStat = await stat(op.sourceDir).catch(() => null);
+  if (sourceStat === null || !sourceStat.isDirectory()) {
+    results.push({ ...record, status: 'rejected', reason: 'SOURCE_MISSING' });
+    return;
+  }
+  const walked = await walkFiles(op.sourceDir);
+  if (manifestDigest(walked.files) !== op.sourceDigest) {
+    results.push({ ...record, status: 'rejected', reason: 'SOURCE_CHANGED',
+      skippedSymlinks: walked.skippedSymlinks.length });
+    return;
+  }
+  const dirTarget = join(targetRoot, op.name);
+  const dirStat = await stat(dirTarget).catch(() => null);
+  const flatTarget = join(targetRoot, op.expectFlatRelPath);
+  const flatNow = await readOrNull(flatTarget);
+  if (dirStat !== null) {
+    if (!dirStat.isDirectory()) { results.push({ ...record, status: 'rejected', reason: 'TARGET_CONFLICT' }); return; }
+    const current = await targetManifest(dirTarget);
+    if (flatNow === null && manifestEquals(current, op.sourceFiles)) {
+      results.push({ ...record, status: 'already-present', skippedSymlinks: walked.skippedSymlinks.length });
+      return;
+    }
+    results.push({ ...record, status: 'rejected', reason: 'TARGET_CONFLICT' });
+    return;
+  }
+  if (flatNow === null) {
+    results.push({ ...record, status: 'rejected', reason: 'FLAT_MISSING' });
+    return;
+  }
+  if (sha256(flatNow) !== op.expectFlatSha256) {
+    results.push({ ...record, status: 'rejected', reason: 'FLAT_CHANGED',
+      flatDigest: sha256(flatNow).slice(0, 16) });
+    return;
+  }
+  const replacedFlatDigest = op.expectFlatSha256.slice(0, 16);
+  if (!apply) {
+    results.push({ ...record, status: 'planned-update', files: op.sourceFiles.length,
+      bytes: op.sourceBytes, skippedSymlinks: walked.skippedSymlinks.length, replacedFlatDigest });
+    return;
+  }
+  const historyRoot = join(dirname(targetRoot), '_assembly-history');
+  const flatBase = join(historyRoot, op.name, `${op.expectFlatSha256.slice(0, 12)}.md`);
+  let archived;
+  const reuseOk = await pathExists(flatBase) &&
+    sha256(await readFile(flatBase)) === op.expectFlatSha256;
+  if (reuseOk) {
+    archived = { path: flatBase, moved: false };
+  } else {
+    let path = flatBase;
+    for (let suffix = 2; await pathExists(path); suffix += 1) path = `${flatBase.slice(0, -3)}-${suffix}.md`;
+    await mkdir(dirname(path), { recursive: true });
+    await rename(flatTarget, path);
+    archived = { path, moved: true };
+  }
+  if (!archived.moved) await rm(flatTarget, { force: true });
+  const restoreFlat = async () => {
+    if (await readOrNull(flatTarget) !== null) return;
+    if (archived.moved) await rename(archived.path, flatTarget).catch(() => {});
+    else await cp(archived.path, flatTarget, { preserveTimestamps: true }).catch(() => {});
+  };
+  const tmp = join(targetRoot, `.tmp-${plan.planId}-${op.opId}`);
+  if (!(await writeCopy({ tmp, op, plan, receiptRef, replacedDigest: replacedFlatDigest }))) {
+    await restoreFlat();
+    results.push({ ...record, status: 'rejected', reason: 'COPY_FAILED' });
+    return;
+  }
+  try {
+    await rename(tmp, dirTarget);
+  } catch (error) {
+    await rm(tmp, { recursive: true, force: true });
+    await restoreFlat();
+    results.push({ ...record, status: 'rejected',
+      reason: (error.code === 'EEXIST' || error.code === 'ENOTEMPTY' || error.code === 'ENOTDIR') ? 'TARGET_CONFLICT' : 'COPY_FAILED' });
+    return;
+  }
+  const after = await targetManifest(dirTarget);
+  const flatAfter = await readOrNull(flatTarget);
+  if (!manifestEquals(after, op.sourceFiles) || flatAfter !== null) {
+    await rm(dirTarget, { recursive: true, force: true });
+    await restoreFlat();
+    results.push({ ...record, status: 'rejected', reason: 'VERIFY_FAILED', rolledBack: true });
+    return;
+  }
+  results.push({ ...record, status: 'updated', files: op.sourceFiles.length, bytes: op.sourceBytes,
+    skippedSymlinks: walked.skippedSymlinks.length, replacedFlatDigest,
+    historyPath: archived.path, historyReused: !archived.moved });
 }
 
 async function main(argv) {

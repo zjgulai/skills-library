@@ -27,7 +27,14 @@ DEFECTS = SPEC / '106-w0-governance/defect-sensitivity-registry-v1.json'
 VERIFY = SPEC / '107-w1-assembly/assembly-batch1-verify.json'
 SCREEN = SPEC / '107-w1-assembly/assembly-screen.json'
 W4_FIX_STATE = SPEC / '111-w4-fixes/w4-fix-state.json'
-Q5_PROGRESS = SPEC / '112-q5-batch1/q5-progress.json'
+# 优化进度源集：progress 文件 → 对应记录文档。先按此清单并入；同件多源时后者覆盖（新批次在读）。
+OPT_PROGRESS = [
+    (SPEC / '112-q5-batch1/q5-progress.json', '112-Q5首批执行记录.md'),
+    (SPEC / '122-r2-prep/progress.json', '122-R2校准批准备与全量批次表预案.md'),
+    (SPEC / '122-r2-prep/b1-progress.json', '124-B1批次执行记录.md'),
+    (SPEC / '122-r2-prep/sp-huashu-progress.json', '125-SP-huashu小批执行记录.md'),
+    (SPEC / '122-r2-prep/b2-progress.json', '127-B2批次执行记录.md'),
+]
 BATCH_STATE = Path(__file__).resolve().parents[1] / 'opt-run/batch-state.json'
 SAGE_ROLES = Path('/Users/lute/project/Sage/packages/capabilities/dsh-overseas-skills/manifest/role-assignments.json')
 KIMI = Path('/Users/lute/project/Sage/packages/capabilities/overseas-skills')
@@ -130,7 +137,17 @@ def main():
     registry = json.loads(Path(args.defects).read_text(encoding='utf-8'))
     disposition = {e['id']: e['disposition'] for e in registry['entries']}
     fixed_state = json.loads(W4_FIX_STATE.read_text(encoding='utf-8'))['fixed'] if W4_FIX_STATE.exists() else {}
-    q5 = json.loads(Q5_PROGRESS.read_text(encoding='utf-8'))['items'] if Q5_PROGRESS.exists() else {}
+    progress = {}
+    for p_path, p_doc in OPT_PROGRESS:
+        if not p_path.exists():
+            continue
+        for k, v in json.loads(p_path.read_text(encoding='utf-8')).get('items', {}).items():
+            entry = progress.setdefault(k, {'reeval': '', 'doc': '', 'assemblyUpdate': False})
+            if v.get('reeval'):
+                entry['reeval'] = v['reeval']
+                entry['doc'] = p_doc
+            if v.get('assemblyUpdate'):
+                entry['assemblyUpdate'] = True
     verify = json.loads(Path(args.verify).read_text(encoding='utf-8'))
     missing_refs = {m['name']: m['missing'] for m in verify['layers']['L3']['missingExamples']}
     screen = json.loads(Path(args.screen).read_text(encoding='utf-8'))
@@ -199,11 +216,11 @@ def main():
             opt_state = 'missing'
             opt_doc = ''
             opt_readings = ''
-        if name in q5 and q5[name].get('reeval'):
-            # Q5 首批的完整回路（基线→修复→复评→写回）读数覆盖历史态
+        if progress.get(name, {}).get('reeval'):
+            # 优化进度源（Q5 首批/R-2 校准批……）的完整回路读数覆盖历史态
             opt_state = 'done-full-loop'
-            opt_doc = '112-Q5首批执行记录.md'
-            opt_readings = q5[name]['reeval']
+            opt_doc = progress[name]['doc']
+            opt_readings = progress[name]['reeval']
         # 近似读数：取串内 ≥40 的数（低于 40 的通常是次数/百分比等非分数），供筛查不作裁决
         nums = [float(x) for x in re.findall(r'\d+\.?\d*', opt_readings)]
         nums = [n for n in nums if 40 <= n <= 100]
@@ -239,7 +256,7 @@ def main():
                         else 'lt90' if nums else 'none'),
             'optObs': 'low-tail-watch' if name in LOW_TAIL_WATCH else '',
             'assemblyStatus': c['assemblyStatus'],
-            'updateState': 'updated' if name in q5 and q5[name].get('assemblyUpdate') else 'none',
+            'updateState': 'updated' if progress.get(name, {}).get('assemblyUpdate') else 'none',
             'nextAction': ';'.join(actions),
         })
 
@@ -259,7 +276,7 @@ def main():
     fnum = lambda v: float(v) if v != '' else None
     summary = {
         'record_type': 'loop-ledger-v1',
-        'at': '2026-09-30', 'total': len(rows),
+        'at': '2026-10-01', 'total': len(rows),
         'byGroup': dict(Counter(r['group'] for r in rows)),
         'classification': dict(Counter(r['classificationState'] for r in rows)),
         'completeness': dict(Counter(r['completenessState'] for r in rows)),
@@ -285,6 +302,7 @@ def main():
         },
         'frozenInputs': {str(p): sha256_file(p) for p in
                          [args.plan, args.ledger, args.defects, args.verify, args.screen, BATCH_STATE]
+                         + [pp for pp, _ in OPT_PROGRESS]
                          if Path(p).exists()},
     }
     (out_dir / 'loop-ledger-v1.summary.json').write_text(

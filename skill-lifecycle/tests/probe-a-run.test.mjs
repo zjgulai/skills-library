@@ -24,7 +24,20 @@ import { noSkillDigest, toolScopeFor } from '../control/arm-scope.mjs';
  * 三档门禁（沿用既有纪律）：capture（脚本化 adapter，零出境；顺带证明技能目录确实进了上下文）
  * → wake-check（挂真实路由，适配器在派发前拒绝一切请求，零出境）→ live（真实请求，按次授权）。
  */
-const APP = '/Applications/DSH Desktop.app/Contents/Resources/app';
+// 运行时基座（2026-10-01 切换 Sage）：T_APP_ROOT 覆盖 → Sage 内置 harness 构建 → Sage 开发树（dist 重建窗口兜底）→ 旧应用路径；找不到即显式失败。
+const APP = (() => {
+  const fs = process.getBuiltinModule('node:fs');
+  const path = process.getBuiltinModule('node:path');
+  const candidates = [
+    process.env.T_APP_ROOT,
+    '/Users/lute/project/Sage/vendor/dsh-desktop/dsh-plugin-desktop/dist/mac-arm64/DSH Desktop.app/Contents/Resources/app',
+    '/Users/lute/project/Sage/vendor/dsh-desktop/dsh-plugin-desktop',
+    '/Applications/DSH Desktop.app/Contents/Resources/app',
+  ].filter(Boolean);
+  const found = candidates.find(candidate => fs.existsSync(path.join(candidate, 'package.json')));
+  if (!found) throw new Error(`harness app root 未找到（试过：${candidates.join(' | ')}；可用 T_APP_ROOT 指定）`);
+  return found;
+})();
 const TRIAL_HOME = join(import.meta.dirname, '..', 'trial-home');
 const PROBE_HOME = join(TRIAL_HOME, 'probe-a');
 const STORE = join(homedir(), '.dsh', '.credentials.yaml');

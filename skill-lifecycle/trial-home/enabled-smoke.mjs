@@ -5,7 +5,20 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const APP = '/Applications/DSH Desktop.app/Contents/Resources/app';
+// 运行时基座（2026-10-01 切换 Sage）：T_APP_ROOT 覆盖 → Sage 内置 harness 构建 → Sage 开发树（dist 重建窗口兜底）→ 旧应用路径；找不到即显式失败。
+const APP = (() => {
+  const fs = process.getBuiltinModule('node:fs');
+  const path = process.getBuiltinModule('node:path');
+  const candidates = [
+    process.env.T_APP_ROOT,
+    '/Users/lute/project/Sage/vendor/dsh-desktop/dsh-plugin-desktop/dist/mac-arm64/DSH Desktop.app/Contents/Resources/app',
+    '/Users/lute/project/Sage/vendor/dsh-desktop/dsh-plugin-desktop',
+    '/Applications/DSH Desktop.app/Contents/Resources/app',
+  ].filter(Boolean);
+  const found = candidates.find(candidate => fs.existsSync(path.join(candidate, 'package.json')));
+  if (!found) throw new Error(`harness app root 未找到（试过：${candidates.join(' | ')}；可用 T_APP_ROOT 指定）`);
+  return found;
+})();
 const require_ = createRequire(join(APP, 'package.json'));
 const load = async name => await import(pathToFileURL(require_.resolve('@deepseek-ai/' + name)).href);
 const sha256 = text => createHash('sha256').update(text, 'utf8').digest('hex');
@@ -16,7 +29,7 @@ const stripFrontmatter = text => text.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/,
  * skill through the real `skill` tool, and prove the served content is the installed content.
  * No provider route is ever mounted — the observation cannot produce network traffic.
  */
-export async function smokeObserver({ skillId, root }) {
+export async function smokeObserver({ skillId, root, entry = 'SKILL.md' }) {
   const scratch = await mkdtemp(join(await realpath(tmpdir()), 'smoke-'));
   const isolated = {};
   for (const key of ['dshHome', 'agentsHome', 'bundledSkillDir']) {
@@ -29,6 +42,7 @@ export async function smokeObserver({ skillId, root }) {
   let outcome;
   // 该根下"实际被发现"的技能名：用来机读对照——非法名字（如中文）会被逐份忽略、不出现在这里。
   let discovered = [];
+  let summaryForReturn = null;
   try {
     await ctx.plugin((await load('dsh-system-prompt')).SystemPrompt);
     await ctx.plugin(toolsMod.ToolRuntime);
@@ -47,13 +61,14 @@ export async function smokeObserver({ skillId, root }) {
     const listed = await ctx.skills.list({ cwd: root });
     discovered = listed.map(skill => skill.name);
     const summary = listed.find(skill => skill.name === skillId);
+    summaryForReturn = summary ?? null;
     if (summary === undefined) {
       outcome = { mode: 'capture', ok: false, detail: `SKILL_NOT_DISCOVERED: ${skillId}`, route: 'none' };
     } else {
       const agent = { id: `smoke-${skillId}`, session: { header: { cwd: root } } };
       const result = await ctx.tools.execute({ callId: 'smoke-skill-load', name: 'skill',
         arguments: { name: skillId }, agent, signal: new AbortController().signal });
-      const installedText = await readFile(join(root, 'SKILL.md'), 'utf8');
+      const installedText = await readFile(join(root, entry), 'utf8');
       const installedDigest = sha256(stripFrontmatter(installedText).trim());
       const servedDigest = sha256(String(result?.value?.content ?? ''));
       outcome = {
@@ -75,5 +90,5 @@ export async function smokeObserver({ skillId, root }) {
     try { await ctx.fiber?.dispose?.(); } catch { /* best effort */ }
     await rm(scratch, { recursive: true, force: true }).catch(() => {});
   }
-  return { ...outcome, files: [`${skillId}/SKILL.md`], discovered };
+  return { ...outcome, files: [`${skillId}/${entry}`], discovered, summary: summaryForReturn };
 }

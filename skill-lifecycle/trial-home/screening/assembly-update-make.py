@@ -68,6 +68,9 @@ def compute_plan_digest(plan):
             if isinstance(op.get('expectTargetDigest'), str):
                 fields.append(op['expectTargetDigest'])
             lines.append('\t'.join(fields))
+        elif op['mode'] == 'flat-to-dir':
+            lines.append('\t'.join([op['opId'], op['mode'], op['name'], op['sourceDir'],
+                                    op['sourceDigest'], op['expectFlatSha256']]))
         else:
             lines.append('\t'.join([op['opId'], op['mode'], op['name'], op['sourceFile'], op['sourceSha256']]))
     return hashlib.sha256('\n'.join(lines).encode('utf-8')).hexdigest()
@@ -92,6 +95,29 @@ def main():
         src = by_name.get(name)
         if src is None:
             raise SystemExit(f'批一计划里没有 {name}（更新生成器当前只覆盖批一指定集）')
+        if src.get('mode') == 'flat':
+            # 平铺件受控换形：库内已转目录（<sourceFile 同目录>/<name>），装配根仍是 <name>.md。
+            flat_lib_dir = Path(library) / Path(src['sourceFile']).relative_to(library).parent / name
+            if not flat_lib_dir.is_dir():
+                raise SystemExit(f'{name}: 平铺件尚未转目录（库内缺 {flat_lib_dir}）')
+            walked = walk_files(flat_lib_dir)
+            if not any(f['relPath'] == 'SKILL.md' for f in walked['files']):
+                raise SystemExit(f'{name}: 源目录缺 SKILL.md')
+            flat_target = Path(target_root) / f'{name}.md'
+            if not flat_target.is_file():
+                raise SystemExit(f'{name}: 装配根平铺件缺失（可能已换形——已等幂等场景请直接核对）')
+            entry = next(f for f in walked['files'] if f['relPath'] == 'SKILL.md')
+            operations.append({
+                'opId': f'op-{i:03d}', 'mode': 'flat-to-dir', 'group': src.get('group'), 'name': name,
+                'route': src.get('route'), 'sourceKind': src.get('sourceKind'),
+                'entryRelPath': f'{name}/SKILL.md', 'entrySha256': entry['sha256'],
+                'sourceDir': str(flat_lib_dir), 'sourceFiles': walked['files'],
+                'sourceBytes': sum(f['bytes'] for f in walked['files']),
+                'sourceDigest': manifest_digest(walked['files']),
+                'expectFlatRelPath': f'{name}.md',
+                'expectFlatSha256': hashlib.sha256(flat_target.read_bytes()).hexdigest(),
+            })
+            continue
         source_dir = src['sourceDir']
         walked = walk_files(source_dir)
         if not any(f['relPath'] == 'SKILL.md' for f in walked['files']):
