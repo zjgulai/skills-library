@@ -90,6 +90,10 @@ APPEND_DOCS = {
 RENAME_ALIASES = {
     '/Users/lute/project/AgentTools/技能库/seo-orchestrator/SKILL.md':
         '/Users/lute/project/AgentTools/技能库/skill-zyx/SKILL.md',
+    # 142 写回段：leadership 计划 op-173 平铺→目录（entryRelPath 由平铺 .md 变为目录 SKILL.md）；
+    # 分类 CSV 为冻结件不动，别名把新路径映射回 CSV 内的旧平铺路径。
+    '/Users/lute/project/AgentTools/技能库/skills-Qoder/leadership-strategy-playbook/SKILL.md':
+        '/Users/lute/project/AgentTools/技能库/skills-Qoder/leadership-strategy-playbook--official_38aAvjmS.md',
 }
 
 SEV_ORDER = ('high', 'medium', 'low')
