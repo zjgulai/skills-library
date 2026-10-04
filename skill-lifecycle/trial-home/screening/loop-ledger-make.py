@@ -75,14 +75,16 @@ LOW_TAIL_WATCH = ['multi-platform-listing-generator', 'product-research-matrix',
 SAGE_CROSSCHECK_NOTE = {'semantic-bucketer': 'sage-cross-check（Q7 逐件核过；1 件角色待商榷——AGT-048·技能版本）'}
 SAGE_CROSSCHECK_DEFAULT = 'sage-cross-check（Q7 逐件核过；candidate-not-validated）'
 
-# 追加集来源（去向②新制作件登记册；v2 修订草案）
+# 追加集来源（去向②新制作件登记册；v2 修订草案；144 号并入 gsd2 七件——v3）
 APPEND_SOURCES = [
     SPEC / '136-r3-direction2/receipts/dir2-ledger-registration.json',
     SPEC / '138-g-direction2/receipts/gdir2-ledger-registration.json',
+    SPEC / '144-g-supplement-direction2/receipts/gsd2-ledger-registration.json',
 ]
 APPEND_DOCS = {
     'dir2-ledger-registration.json': '136-R3去向二候选制作记录.md',
     'gdir2-ledger-registration.json': '138-G去向二候选制作记录.md',
+    'gsd2-ledger-registration.json': '144-G续补去向二候选制作记录.md',
 }
 
 # 路径别名（改名件；140 号）：计划 op 已用新路径，分类 CSV 为冻结件（110 号「逐字节不变」证过）；
@@ -189,6 +191,8 @@ def main():
     parser.add_argument('--out-dir', default=str(DEFAULT_OUT))
     parser.add_argument('--append', action='store_true')
     parser.add_argument('--tag', default='v1')
+    # 摘要 at 字段：默认保持 2026-10-01（v1/v2 纪元，旧行为逐字节不变）；新 tag 生成时显式传入当日
+    parser.add_argument('--at', default='2026-10-01')
     args = parser.parse_args()
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -341,7 +345,7 @@ def main():
     fnum = lambda v: float(v) if v != '' else None
     summary = {
         'record_type': f'loop-ledger-{args.tag}',
-        'at': '2026-10-01', 'total': len(rows),
+        'at': args.at, 'total': len(rows),
         'byGroup': dict(Counter(r['group'] for r in rows)),
         'classification': dict(Counter(r['classificationState'] for r in rows)),
         'completeness': dict(Counter(r['completenessState'] for r in rows)),
