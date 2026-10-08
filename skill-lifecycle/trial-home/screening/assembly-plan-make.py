@@ -4,7 +4,8 @@
 选择规则（105 号方案 P2 已批准）：
   A 组：81-Skills 全部（跳过对象状态阻断件）
   B 组：标准入口中 route=role-candidate 且不在 81-Skills 的达标件
-  C 组：1 个 Qoder 平铺试点（验证平铺形态可被发现模拟识别）
+  C 组：1 个 Qoder 试点（op 形态由账本入口形状决定——目录入口出 dir op，平铺入口出 flat op；
+        2026-10-08 用户拍板，此前写死 flat，142 号把该件转目录后每次重算都会退回旧形制）
 摘要口径与 assembly-project.mjs 完全一致（行式清单 sha256 / 计划摘要）。
 
 用法：python3 -B assembly-plan-make.py [--library <技能库根>] [--out <plan.json>]
@@ -99,7 +100,7 @@ def main():
             return False
         return True
 
-    def dir_op(row, group):
+    def dir_op(row, group, kind=None):
         nonlocal total_bytes, total_symlinks
         source_dir = os.path.dirname(row['entryPath'])
         files, symlinks = walk_files(source_dir)
@@ -110,7 +111,7 @@ def main():
         total_bytes += sum(f['bytes'] for f in files)
         operations.append({
             'opId': f'op-{len(operations) + 1:03d}', 'mode': 'dir', 'group': group,
-            'name': row['name'], 'route': row['route'], 'sourceKind': 'standard',
+            'name': row['name'], 'route': row['route'], 'sourceKind': kind or row['sourceKind'],
             'entryRelPath': rel_path(row), 'entrySha256': row['entrySha256'],
             'sourceDir': source_dir, 'sourceFiles': files,
             'sourceBytes': sum(f['bytes'] for f in files), 'sourceDigest': manifest_digest(files),
@@ -128,6 +129,10 @@ def main():
     pilot = next((r for r in rows if r['sourceKind'] == 'qoder' and r['name'] == PILOT_NAME), None)
     if pilot is None:
         excluded.append({'group': 'C', 'path': PILOT_NAME, 'reason': 'pilot-not-found'})
+    elif os.path.basename(pilot['entryPath']) == 'SKILL.md':
+        # 试点 op 的形态**由账本入口形状决定**（用户 2026-10-08 拍板）：142 号已把这件从平铺转成目录，
+        # 写死 flat 会让每次重算计划都退回旧形制并以 SOURCE_MISSING 被拒。
+        dir_op(pilot, 'C')
     else:
         operations.append({
             'opId': f'op-{len(operations) + 1:03d}', 'mode': 'flat', 'group': 'C',
