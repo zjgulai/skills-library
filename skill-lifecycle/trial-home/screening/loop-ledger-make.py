@@ -22,6 +22,7 @@ from collections import Counter
 from pathlib import Path
 
 SPEC = Path(__file__).resolve().parents[3] / 'docs/specs/2026-09-25-dsh-skill-lifecycle'
+LIB_ROOT = '/Users/lute/project/AgentTools/技能库/'
 DEFAULT_OUT = SPEC / '109-loop-ledger'
 PLAN = SPEC / '107-w1-assembly/assembly-plan-v1-batch1.json'
 CLASS_CSV = SPEC / '108-w2-classification/classification-projection-v1.csv'
@@ -80,11 +81,14 @@ APPEND_SOURCES = [
     SPEC / '136-r3-direction2/receipts/dir2-ledger-registration.json',
     SPEC / '138-g-direction2/receipts/gdir2-ledger-registration.json',
     SPEC / '144-g-supplement-direction2/receipts/gsd2-ledger-registration.json',
+    # 145 号 §21：ZIP 族 42 件写回＋投影（41 件已投影入册；不指派角色的 1 件不入）
+    SPEC / '145-standardization-baseline/zip42-writeback/zip42-ledger-registration.json',
 ]
 APPEND_DOCS = {
     'dir2-ledger-registration.json': '136-R3去向二候选制作记录.md',
     'gdir2-ledger-registration.json': '138-G去向二候选制作记录.md',
     'gsd2-ledger-registration.json': '144-G续补去向二候选制作记录.md',
+    'zip42-ledger-registration.json': '145-库面标准化地基与未入环族批记录.md',
 }
 
 # 路径别名（改名件；140 号）：计划 op 已用新路径，分类 CSV 为冻结件（110 号「逐字节不变」证过）；
@@ -147,6 +151,22 @@ def defect_hits(registry, ops):
     return {k: sorted(set(v)) for k, v in hits.items()}
 
 
+def normalize_home(reg_name, it):
+    """登记册 home 一律落成库内相对路径。
+
+    闭环台账这一列的消费者（standardization-ledger 的管理圈票、normalize-audit 的路径集）
+    全部按**库内相对路径**比对；写成绝对路径不会报错，只会让这一票静默缺席
+    （145 号 §21 实测：41 件写回投影后 inLoop 全 false，正控才抓出来）。
+    所以这里只接受两种形状：相对路径，或本库绝对路径（截前缀）；其它绝对路径直接判错。
+    """
+    home = (it.get('home') or '').strip().replace('\\', '/')
+    if home.startswith(LIB_ROOT):
+        home = home[len(LIB_ROOT):]
+    if not home or home.startswith('/') or home.split('/')[0] == '..':
+        raise SystemExit(f'登记册 home 无法落成库内相对路径：{reg_name} / {it.get("name")} → {it.get("home")!r}')
+    return home
+
+
 def load_append_rows(reg_paths):
     """追加集行（组 X；新制作弧线＝done-full-loop；同 28 列）。"""
     out = []
@@ -162,7 +182,7 @@ def load_append_rows(reg_paths):
             nums = [n for n in (float(x) for x in re.findall(r'\d+\.?\d*', readings)) if 40 <= n <= 100]
             out.append({
                 'ledgerId': f'LAP{idx:02d}', 'opId': f'ap-{idx:03d}', 'group': 'X',
-                'name': it['name'], 'sourceKind': 'standard', 'sourcePath': it['home'],
+                'name': it['name'], 'sourceKind': 'standard', 'sourcePath': normalize_home(Path(p).name, it),
                 'routeV1': '', 'roleCandidates': '', 'sageRoles': '',
                 'basisV1': 'new-draft（去向②新制作；非 v1 路由件）',
                 'classificationState': 'closed',

@@ -267,7 +267,13 @@ export function buildLedger({ libraryRoot, trialHome, specHome, screenReport, di
 
   // --- 票 5：闭环台账（管理圈）---
   const loop = new Map();
-  const loopRows = readCsv(join(specHome, '109-loop-ledger/loop-ledger-v3.csv')) ?? [];
+  // 闭环台账版本会一版版长出来，文件名不能写死：写死 v3 就等于让「管理圈」一票永远停在 v3 时点
+  // （v4 追加了 41 件却读不到，是静默漏登而不是报错）。取最新 v\*，并把读到的版本随账本一起报出。
+  const loopDir = join(specHome, '109-loop-ledger');
+  const loopPick = readdirSync(loopDir).filter(name => /^loop-ledger-v\d+\.csv$/.test(name))
+    .sort((a, b) => Number(a.match(/v(\d+)/)[1]) - Number(b.match(/v(\d+)/)[1])).pop();
+  const loopFile = loopPick ?? 'loop-ledger-v3.csv';
+  const loopRows = readCsv(join(loopDir, loopFile)) ?? [];
   for (const row of loopRows) {
     const raw = (row.sourcePath ?? '').replace(/\\/g, '/');
     if (!raw) continue;
@@ -393,7 +399,7 @@ export function buildLedger({ libraryRoot, trialHome, specHome, screenReport, di
   return { items, renameMap: [...renameMap], skippedTopLevel, aliasRescued,
     zipRoundByDir, zipScoreByRound, ledgerCounts: {
     judgedPaths: judged.size, writtenBackDirs: writtenBack.size, firstEntryKeys: firstEntry.size,
-    loadedNames: loaded.size, loopDirs: loop.size, scoredNames: scores.size,
+    loadedNames: loaded.size, loopDirs: loop.size, scoredNames: scores.size, loopFile,
   } };
 }
 
@@ -451,11 +457,23 @@ function controls({ libraryRoot, trialHome, specHome }) {
       }
     }
   }
-  const zipFiveVotes = zipBatch.filter(item => item.votes.judged.value
+  const zipFourVotes = zipBatch.filter(item => item.votes.judged.value
     && item.votes.writtenBack.value === true && item.votes.loaded.value === true && item.votes.screened.value === true);
-  const zipNotLoop = zipBatch.filter(item => item.votes.inLoop.value);
-  expect('正控-ZIP 首入批五票齐（除管理圈）', zipFiveVotes.length === 42 && zipNotLoop.length === 0,
-    `五票齐 ${zipFiveVotes.length}/42｜不应在管理圈却在的 ${zipNotLoop.length} 件：${zipNotLoop.slice(0, 3).map(item => item.dir).join(', ') || '（无）'}`);
+  expect('正控-ZIP 首入批四票齐', zipFourVotes.length === 42,
+    `screened/judged/writtenBack/loaded 四票齐 ${zipFourVotes.length}/42`);
+  // 管理圈票的期望值不写死：从投影登记册（41 件已投影、不指派角色的 1 件不在其中）现取。
+  // 写死 41 或写死件名，登记册下次多一件就会假绿；这里让登记册当真值，票只对它比对。
+  const zipRegPath = join(specHome, '145-standardization-baseline/zip42-writeback/zip42-ledger-registration.json');
+  const zipProjected = existsSync(zipRegPath)
+    ? new Set(readJson(zipRegPath).items.map(item => item.name)) : null;
+  const zipLoopMismatch = zipProjected === null ? []
+    : zipBatch.filter(item => item.votes.inLoop.value !== zipProjected.has(item.dirName));
+  expect('正控-ZIP 投影件的管理圈票', zipProjected !== null
+      && zipBatch.filter(item => item.votes.inLoop.value).length === zipProjected.size
+      && zipLoopMismatch.length === 0,
+    zipProjected === null ? '投影登记册缺失，管理圈票无从比对'
+      : `登记册投影 ${zipProjected.size} 件｜台账在圈 ${zipBatch.filter(item => item.votes.inLoop.value).length} 件`
+        + `｜与登记册不符 ${zipLoopMismatch.length} 件：${zipLoopMismatch.slice(0, 3).map(item => item.dir).join(', ') || '（无）'}`);
   const zipScoreGap = zipBatch.filter(item => !Number.isFinite(item.bestCertifiedScore)
     || item.bestCertifiedScore !== ledger.zipScoreByRound.get(ledger.zipRoundByDir.get(item.dir)));
   expect('正控-ZIP 首入批分数入账', zipScoreGap.length === 0,
