@@ -41,6 +41,12 @@ library-backup-*/
 /skill-lifecycle/trial-home/t2/*
 !/skill-lifecycle/trial-home/t2/*.mjs
 # 记录类：顶层记录文档（*.md）入库；子目录（证据/数据/候选，约 295MB 与敏感类）仍隔离
-/docs/specs/2026-09-25-dsh-skill-lifecycle/*
+# 记录类：顶层记录文档（*.md）与治理链**生成器源码**入库；其余（证据/数据/候选/备份，约 295MB 与敏感类）仍隔离。
+# 目录必须逐层放行（!/**/），否则 git 不会下探、里面的 *.py 否定规则永不生效（2026-10-08 实测踩过）。
+/docs/specs/2026-09-25-dsh-skill-lifecycle/**
+!/docs/specs/2026-09-25-dsh-skill-lifecycle/**/
 !/docs/specs/2026-09-25-dsh-skill-lifecycle/*.md
+!/docs/specs/2026-09-25-dsh-skill-lifecycle/**/*.py
+!/docs/specs/2026-09-25-dsh-skill-lifecycle/**/*.mjs
+!/docs/specs/2026-09-25-dsh-skill-lifecycle/**/*.js
 /skill教材-*.html
