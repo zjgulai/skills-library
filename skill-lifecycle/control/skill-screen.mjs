@@ -99,7 +99,10 @@ function finding(code, severity, detail) {
   return { code, severity, detail };
 }
 
-const boundaryHintPattern = /拒绝|禁止|不得|不要|不许|不触发|防止|不执行|不做|不予|永不|严禁|不提供|不涉及|不包含|而非|never|avoid|do not|should not|must not|won't|refuse|disallow/iu;
+// 英文护栏形制补词（2026-10-08 实测）：`Destructive action ahead (`rm -rf`, force push, …). Confirm before acting.`
+// 这类句子把风险项**列举在危害标签之下**，句内没有"拒绝/never/avoid"任何一个词，于是被判 high。
+// 只降严重度、不删 finding：命中仍带「句内含拒绝/禁止语义」标，reviewer 看得见原文。
+const boundaryHintPattern = /拒绝|禁止|不得|不要|不许|不触发|防止|不执行|不做|不予|永不|严禁|不提供|不涉及|不包含|而非|never|avoid|do not|should not|must not|won't|refuse|disallow|destructive|dangerous action|hazard|confirm before|ask before|with approval|human approval|人工确认|确认后|需授权/iu;
 
 function snippetAround(text, index) {
   const start = Math.max(0, index - 20);

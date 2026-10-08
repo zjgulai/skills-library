@@ -194,6 +194,7 @@ export function buildLedger({ libraryRoot, trialHome, specHome, screenReport, di
   const judgedBy = new Map();
   for (const rel of judged.keys()) judgedBy.set(rel, 'path');
   const planDir = join(trialHome, 'opt-run', 'writeback-zip');
+  const zipRoundByDir = new Map();
   if (!disableRecertVote && existsSync(planDir)) {
     const stageBySkill = new Map();
     for (const entry of readdirSync(join(trialHome, 'opt-run'), { withFileTypes: true })) {
@@ -215,6 +216,7 @@ export function buildLedger({ libraryRoot, trialHome, specHome, screenReport, di
         if (!stage) continue;
         const digest = (stage.digests ?? {})[SKILL_MD] ?? null;
         if (!digest || typeof op.sourceSha256 !== 'string' || !op.sourceSha256.startsWith(digest)) continue;
+        zipRoundByDir.set(dirname(op.relPath), Number(stage.round));
         const dir = dirname(op.relPath);
         if (!judged.has(dir)) judged.set(dir, []);
         judged.get(dir).push(`r${stage.round}`);
@@ -276,6 +278,21 @@ export function buildLedger({ libraryRoot, trialHome, specHome, screenReport, di
 
   // --- 认证分数（按名，来自各批 results.csv）---
   const scores = new Map();
+  // ZIP 族四批复收口件按**轮号**记分（closeout csv 的 round/score 两列），再用票 2b 已确定的 dir→轮号落到件名上。
+  // 不这么做就会出现「票全成立、bestCertifiedScore 却为空」的静默缺口（2026-10-08 实测 42 件全空）。
+  const zipScoreByRound = new Map();
+  for (const rel of ['145-standardization-baseline/zip-calibration-results.csv',
+    '145-standardization-baseline/zip-slice52-results.csv',
+    '145-standardization-baseline/zip-recert-results.csv',
+    '145-standardization-baseline/zip-recert2-results.csv',
+    '145-standardization-baseline/zip-recert3-results.csv',
+    '145-standardization-baseline/zip-gen3-results.csv']) {
+    const rows = readCsv(join(specHome, rel));
+    for (const row of rows ?? []) {
+      const round = Number(row.round), score = Number(row.score);
+      if (Number.isFinite(round) && Number.isFinite(score)) zipScoreByRound.set(round, score);
+    }
+  }
   const ledgers = [
     '143-library-normalize/fix-plans/p2-wave1-results.csv',
     '143-library-normalize/fix-plans/p2-wave2-results.csv',
@@ -296,6 +313,12 @@ export function buildLedger({ libraryRoot, trialHome, specHome, screenReport, di
       const best = Math.max(scores.get(row.name) ?? 0, score);
       scores.set(row.name, best);
     }
+  }
+  for (const [dir, round] of zipRoundByDir) {
+    const score = zipScoreByRound.get(round);
+    if (!Number.isFinite(score)) continue;
+    const name = basename(dir);
+    scores.set(name, Math.max(scores.get(name) ?? 0, score));
   }
 
   const items = [];
@@ -365,7 +388,10 @@ export function buildLedger({ libraryRoot, trialHome, specHome, screenReport, di
     });
   }
 
-  return { items, renameMap: [...renameMap], skippedTopLevel, aliasRescued, ledgerCounts: {
+  // zipRoundByDir／zipScoreByRound 随账本一起返回：控制要能独立复算「票来自哪一轮、那一轮收口分是多少」，
+  // 而不是在 controls() 里再抄一份读文件的逻辑（抄来的第二份口径迟早会和真源不一致）。
+  return { items, renameMap: [...renameMap], skippedTopLevel, aliasRescued,
+    zipRoundByDir, zipScoreByRound, ledgerCounts: {
     judgedPaths: judged.size, writtenBackDirs: writtenBack.size, firstEntryKeys: firstEntry.size,
     loadedNames: loaded.size, loopDirs: loop.size, scoredNames: scores.size,
   } };
@@ -430,6 +456,10 @@ function controls({ libraryRoot, trialHome, specHome }) {
   const zipNotLoop = zipBatch.filter(item => item.votes.inLoop.value);
   expect('正控-ZIP 首入批五票齐（除管理圈）', zipFiveVotes.length === 42 && zipNotLoop.length === 0,
     `五票齐 ${zipFiveVotes.length}/42｜不应在管理圈却在的 ${zipNotLoop.length} 件：${zipNotLoop.slice(0, 3).map(item => item.dir).join(', ') || '（无）'}`);
+  const zipScoreGap = zipBatch.filter(item => !Number.isFinite(item.bestCertifiedScore)
+    || item.bestCertifiedScore !== ledger.zipScoreByRound.get(ledger.zipRoundByDir.get(item.dir)));
+  expect('正控-ZIP 首入批分数入账', zipScoreGap.length === 0,
+    `${zipScoreGap.length} 件缺 certified 分数或与轮次收口值不符：${zipScoreGap.slice(0, 3).map(item => `${item.dir}=${item.bestCertifiedScore}`).join(', ') || '（无）'}`);
   expect('正控-ZIP 首入批 judged 接得上', zipBatch.length === 42 && zipByteCheck === 42 && zipByteFail.length === 0,
     `zip-recert 票 ${zipBatch.length} 件（应 42）｜逐字节复核 ${zipByteCheck} 件，不符 ${zipByteFail.length} 条：${zipByteFail.slice(0, 3).join(', ') || '（无）'}`);
   // 负控-ZIP：摘掉 recert 源后这 42 件必须整体回到未判读——证明那条票确实由该源提供，不是别处蹭来的。

@@ -175,6 +175,25 @@ ${BODY}` },
     `bullet 没有动词时要用上方总起判：${JSON.stringify(dangerous.map(item => [item.severity, item.detail]))}`);
 });
 
+test('an English hazard-framed risk list is a boundary, an imperative one is still high', () => {
+  // 2026-10-08 实测：i-have-adhd 的护栏句「Destructive action ahead (`rm -rf`, force push, …). Confirm before acting.」
+  // 被原词表判成 high——句里没有「拒绝/never/avoid」任何一个词，危害标签在前、风险项在括号里列举。
+  const report = screenSkills({ files: [
+    { relPath: 'adhd/SKILL.md', content: `${frontmatter('adhd', 'Use when the user asks for terse output with explicit stop conditions. Do not use for generic brevity requests.')}
+## When to intervene
+
+2. Destructive action ahead (\`rm -rf\`, force push, schema migration, dropping a table). Confirm before acting. Safety wins over brevity.
+${BODY}` },
+    { relPath: 'cleaner/SKILL.md', content: `${frontmatter('cleaner', 'Use when the user asks to wipe build artifacts before a rebuild.')}
+Run \`rm -rf\` on the build directory, then rebuild from scratch.
+${BODY}` },
+  ] });
+  const sev = name => report.skills.find(item => item.relPath === `${name}/SKILL.md`)
+    .findings.filter(item => item.code === 'DANGEROUS_COMMAND').map(item => item.severity);
+  assert.deepEqual(sev('adhd'), ['low'], '危害标签下的列举式风险项按边界降级，但命中必须留痕');
+  assert.deepEqual(sev('cleaner'), ['high'], `祈使式 rm -rf 不得被同一词表放过：${JSON.stringify(sev('cleaner'))}`);
+});
+
 test('a public key path is not a private-key finding, and env-var references stay medium', () => {
   const report = screenSkills({ files: [
     { relPath: 'ssh-guide/SKILL.md', content: `${frontmatter('ssh-guide', 'Use when the user needs a documented SSH key setup guide for a GitLab CLI workflow.')}
