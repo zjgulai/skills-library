@@ -82,6 +82,50 @@ def uncovered_members(appended, chosen, d_rows):
     return sorted({a['name'] for a in appended} - chosen - {r['name'] for r in d_rows})
 
 
+def membership_sha(rows):
+    """台账成员指纹：名单（名字＋来源根）的规范形摘要。版本文件名换、名单没换，不该逼重算。"""
+    return hashlib.sha256('\n'.join(
+        f"{r['name']}\t{r['sourcePath']}" for r in sorted(rows, key=lambda x: x['name'])).encode('utf-8')).hexdigest()
+
+
+def staleness_report(recorded, current_rows):
+    """盘上那版计划用的台账名单，跟最新台账还对不对得上。
+
+    这条要能红：§26.5 记下过"台账陈旧会让计划陈旧，而 `uncovered` 仍为空、门不响"——
+    生成时读的就是最新台账，所以生成那一刻永远测不出陈旧；只有拿盘上计划反查才判得出来。
+    """
+    cur = membership_sha(current_rows)
+    newest_file = current_rows[0]['file'] if current_rows else ''
+    if not recorded or not recorded.get('membershipSha256'):
+        return False, (f'计划里没有台账成员指纹（早于本机制的版本）｜最新台账 {newest_file} '
+                       f'{len(current_rows)} 名成员 ⇒ 需要重算')
+    if recorded['membershipSha256'] == cur:
+        note = '' if recorded.get('file') == newest_file else f'（台账换了文件名 {recorded.get("file")} → {newest_file}，成员未变）'
+        return True, f'名单一致：{newest_file}｜{len(current_rows)} 名成员｜指纹 {cur[:12]}{note}'
+    return False, (f'名单已变：计划记 {recorded.get("file")} 的 {recorded.get("membershipSha256", "")[:12]}'
+                   f'（{recorded.get("rows")} 名）→ 最新 {newest_file} 的 {cur[:12]}（{len(current_rows)} 名）⇒ 计划需重算')
+
+
+def historical_overwrite_guard(out_path, new_digest, snapshot_path=None):
+    """默认 --out 指向 107 那份历史快照时拒写：闭环台账拿它当输入，历史一改输入就漂。
+
+    拦的是"用默认参数跑一遍"这个具体动作，不是禁止重写历史——真要重写，先自行把那份文件移开。
+    快照路径做成参数，是为了能在 `--self-test` 里造出"会改写历史"那一例（不能拿真历史文件试）。
+    """
+    snapshot = snapshot_path if snapshot_path is not None else DEFAULT_OUT
+    if out_path != snapshot or not out_path.exists():
+        return None
+    try:
+        existing = json.loads(out_path.read_text(encoding='utf-8'))
+    except ValueError:
+        return f'{out_path.name} 读不开，无法判断会不会改写历史 ⇒ 不落盘'
+    if existing.get('planDigest') == new_digest:
+        return None
+    return (f'{out_path.name} 是 107 号那批的历史快照（{len(existing.get("operations", []))} ops／'
+            f'digest {str(existing.get("planDigest"))[:12]}），重算会变成 {new_digest[:12]}。'
+            f'现行计划请显式 `--out` 指到 opt-run 下那份；确要重写历史，先自行移开这个文件。')
+
+
 def loop_appended_rows(spec_dir):
     """闭环台账（取最新 v*）里 assemblyStatus=appended-projected 的行＝去向②首入件名单。
 
@@ -142,8 +186,17 @@ def main():
     parser.add_argument('--library', default=str(DEFAULT_LIB))
     parser.add_argument('--ledger', default=str(DEFAULT_LEDGER))
     parser.add_argument('--out', default=str(DEFAULT_OUT))
+    parser.add_argument('--verify-current', metavar='PLAN.json', default=None,
+                        help='拿盘上那版计划反查台账名单是否已陈旧（不生成、只判）')
     args = parser.parse_args()
     library = Path(args.library)
+    if args.verify_current:
+        recorded = json.loads(Path(args.verify_current).read_text(encoding='utf-8'))
+        ledger = ((recorded.get('selection') or {}).get('appendedRegistration') or {}).get('ledger')
+        ok, detail = staleness_report(ledger, loop_appended_rows(SPEC_DIR))
+        print(json.dumps({'mode': 'verify-current', 'plan': str(args.verify_current),
+                          'ok': ok, 'detail': detail}, ensure_ascii=False))
+        return 0 if ok else 1
     rows = list(csv.DictReader(Path(args.ledger).open(encoding='utf-8-sig')))
 
     def rel_path(row):
@@ -242,6 +295,9 @@ def main():
                 'members': len(appended),
                 'coveredByABorD': len({a['name'] for a in appended} - set(uncovered)),
                 'uncovered': uncovered,
+                'ledger': {'file': (appended[0]['file'] if appended else ''),
+                           'rows': len(appended),
+                           'membershipSha256': membership_sha(appended)},
                 'note': 'D 组只为把首入件纳入可复算面；成员名单来自闭环台账（自指的一点），'
                         'op 的清单与摘要一律按库面现算（非自指）。'},
             'pilotFlat': sum(1 for op in operations if op['group'] == 'C'),
@@ -255,6 +311,9 @@ def main():
     }
     plan['planDigest'] = plan_digest(plan)
     out = Path(args.out)
+    refused = historical_overwrite_guard(out, plan['planDigest'])
+    if refused:
+        raise SystemExit(refused)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json_dump(plan) + '\n')
     print(json_dump({k: v for k, v in plan.items() if k != 'operations'}))
@@ -318,6 +377,36 @@ def self_test():
     leaked = uncovered_members([item('Bad_Name')], set(), rows3)
     check('红-被排除成员漏网要判红', leaked == ['Bad_Name'], f'uncovered={leaked}')
     check('绿-走 A/B 的成员不算漏网', uncovered_members([item('dup')], {'dup'}, []) == [])
+
+    # M1 历史快照守卫：默认 --out 指向 107 那份首批计划（闭环台账的输入），会改写历史时拒写
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        snap = Path(td) / 'assembly-plan-v1-batch1.json'
+        check('绿-写到别处不拦',
+              historical_overwrite_guard(Path(td) / 'current-plan.json', 'x', snapshot_path=snap) is None)
+        check('绿-快照不在位时放行（首次生成不是改写历史）',
+              historical_overwrite_guard(snap, 'x', snapshot_path=snap) is None)
+        snap.write_text(json.dumps({'planDigest': 'same', 'operations': []}), encoding='utf-8')
+        check('绿-重算结果与快照一致时不算改写',
+              historical_overwrite_guard(snap, 'same', snapshot_path=snap) is None)
+        msg = historical_overwrite_guard(snap, 'different', snapshot_path=snap)
+        check('红-会改写历史快照时拒写', bool(msg) and '历史快照' in msg, (msg or '')[:48])
+        snap.write_text('{ 不是合法 json', encoding='utf-8')
+        check('红-快照读不开也拒（不靠猜放行）', historical_overwrite_guard(snap, 'x', snapshot_path=snap) is not None)
+
+        # M2 陈旧判定：生成那一刻读的就是最新台账，所以只能拿盘上计划反查
+        rows_a = [item('fixture-d-one')]
+        fp = membership_sha(rows_a)
+        ok_a, detail_a = staleness_report({'file': 'loop-ledger-vT.csv', 'rows': 1, 'membershipSha256': fp}, rows_a)
+        check('绿-名单未变判为不陈旧', ok_a, detail_a[:48])
+        ok_b, detail_b = staleness_report({'file': 'loop-ledger-vT.csv', 'rows': 1,
+                                           'membershipSha256': 'deadbeefdeadbeef'}, rows_a)
+        check('红-名单变了必须判红', (not ok_b) and '名单已变' in detail_b, detail_b[:56])
+        ok_c, detail_c = staleness_report(None, rows_a)
+        check('红-旧版计划没有指纹也判红', (not ok_c) and '没有台账成员指纹' in detail_c, detail_c[:56])
+        ok_d, detail_d = staleness_report({'file': 'loop-ledger-vT.csv', 'rows': 1, 'membershipSha256': fp},
+                                          [dict(r, file='loop-ledger-vT9.csv') for r in rows_a])
+        check('绿-台账只换版号（名单未变）不逼重算', ok_d and '成员未变' in detail_d, detail_d[:56])
 
     # 版本挑选：数字序（v10 比 v2 新）。字典序会挑到 v2 —— 名单就会停在旧版（§21.5 同一条教训）
     import csv as _csv

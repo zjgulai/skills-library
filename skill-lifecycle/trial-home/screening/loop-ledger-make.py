@@ -8,8 +8,12 @@
 - 补全态：缺陷登记册命中（repair-pending → 未闭环；registered/blocked → 已登记闭环）＋四层验证 L3 缺失引用；
 - 优化态：A 组以历史读数认账（Q2：不重跑）；读数与批次记录逐件挂钩；B/C 组无优化证据 → missing；
 - 装配态：batch1-projected（回执 w1-batch1-2026-09-30）；受控更新（Q3）后由回填脚本改状态。
+- 更新票（updateState）有**两路来源，各报出处、不互相推断**：各批 progress.json 的 `assemblyUpdate`
+  （叙述源）＋`_assembly-receipts/*.json` 里 `mode=apply` 且 `status=updated` 的 op（落位源）。
+  2026-10-09 前只有前者，所以没写进 progress 的真实受控更新在管理圈隐形（145 号 §27.4）。
 
 用法：python3 loop-ledger-make.py [--out-dir <dir>] [--append] [--tag v1|v2]
+      python3 loop-ledger-make.py --self-test   # 更新票两路来源的双向证明（合成件，不碰盘上回执）
       （默认写入 109-loop-ledger/；--append 并入追加集登记册＝v2 修订草案新增，
        未加 --append 时行为与现行逐字节一致——回归由收据验证）
 """
@@ -30,6 +34,7 @@ DEFECTS = SPEC / '106-w0-governance/defect-sensitivity-registry-v1.json'
 VERIFY = SPEC / '107-w1-assembly/assembly-batch1-verify.json'
 SCREEN = SPEC / '107-w1-assembly/assembly-screen.json'
 W4_FIX_STATE = SPEC / '111-w4-fixes/w4-fix-state.json'
+RECEIPT_ROOT = Path(LIB_ROOT) / '_assembly-receipts'
 # 优化进度源集：progress 文件 → 对应记录文档。先按此清单并入；同件多源时后者覆盖（新批次在读）。
 OPT_PROGRESS = [
     (SPEC / '112-q5-batch1/q5-progress.json', '112-Q5首批执行记录.md'),
@@ -167,8 +172,12 @@ def normalize_home(reg_name, it):
     return home
 
 
-def load_append_rows(reg_paths):
-    """追加集行（组 X；新制作弧线＝done-full-loop；同 28 列）。"""
+def load_append_rows(reg_paths, progress_map, receipts):
+    """追加集行（组 X；新制作弧线＝done-full-loop；同 29 列）。
+
+    更新票走同一个 `update_state`：组 X 曾经把 updateState 硬写成 none，
+    那正是"真实落过位的件在管理圈隐形"的另一个现场——票数不该按组另立规则。
+    """
     out = []
     idx = 0
     for p in reg_paths:
@@ -180,6 +189,7 @@ def load_append_rows(reg_paths):
             m = re.search(r'两跑\s*([\d.]+/[\d.]+)', review)
             readings = f'{m.group(1)}（两跑）' if m else review
             nums = [n for n in (float(x) for x in re.findall(r'\d+\.?\d*', readings)) if 40 <= n <= 100]
+            upd_state, upd_by = update_state(it['name'], progress_map, receipts)
             out.append({
                 'ledgerId': f'LAP{idx:02d}', 'opId': f'ap-{idx:03d}', 'group': 'X',
                 'name': it['name'], 'sourceKind': 'standard', 'sourcePath': normalize_home(Path(p).name, it),
@@ -195,10 +205,51 @@ def load_append_rows(reg_paths):
                 'optMin': min(nums) if nums else '', 'optMax': max(nums) if nums else '',
                 'optBand': ('ge96' if nums and max(nums) >= 96 else
                             'band-90-96' if nums and max(nums) >= 90 else 'lt90' if nums else 'none'),
-                'optObs': '', 'assemblyStatus': 'appended-projected', 'updateState': 'none',
+                'optObs': '', 'assemblyStatus': 'appended-projected',
+                'updateState': upd_state,
+                'updateStateBy': upd_by,
                 'nextAction': 'closed',
             })
     return out
+
+
+def receipt_updates(receipt_root):
+    """装配根回执＝"真的落过位"的权威记录：mode=apply 且 op.status=updated 的技能名 → 出处。
+
+    只认 updated：`applied` 是首次投影、`dry-run` 什么都没落，两者都不该投这张票。
+    读不开的回执直接跳过——宁可少一票，也不把解析不了的东西当真值。
+    """
+    out = {}
+    if not receipt_root.is_dir():
+        return out
+    for path in sorted(receipt_root.glob('*.json')):
+        try:
+            rec = json.loads(path.read_text(encoding='utf-8'))
+        except (ValueError, OSError):
+            continue
+        if not isinstance(rec, dict) or rec.get('mode') != 'apply':
+            continue
+        for r in rec.get('results') or []:
+            if isinstance(r, dict) and r.get('status') == 'updated' and r.get('name'):
+                hit = out.setdefault(r['name'], {'files': [], 'digests': []})
+                if path.name not in hit['files']:
+                    hit['files'].append(path.name)
+                digest = str(r.get('replacedDigest') or '')
+                if digest and digest not in hit['digests']:
+                    hit['digests'].append(digest)
+    return out
+
+
+def update_state(name, progress_map, receipts):
+    """装配更新票：两条来源各报出处，合起来才是一行；任何一条单独都不许冒充另一条。"""
+    srcs = []
+    entry = progress_map.get(name) or {}
+    if entry.get('assemblyUpdate'):
+        srcs.append(f"progress:{entry.get('updateDoc') or 'unnamed'}")
+    hit = receipts.get(name)
+    if hit:
+        srcs.append('receipt:' + ','.join(hit['files']))
+    return ('updated' if srcs else 'none'), ';'.join(srcs)
 
 
 def main():
@@ -213,6 +264,8 @@ def main():
     parser.add_argument('--tag', default='v1')
     # 摘要 at 字段：默认保持 2026-10-01（v1/v2 纪元，旧行为逐字节不变）；新 tag 生成时显式传入当日
     parser.add_argument('--at', default='2026-10-01')
+    parser.add_argument('--receipts', default=str(RECEIPT_ROOT),
+                        help='装配根回执目录（更新票的落位源）')
     args = parser.parse_args()
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -235,9 +288,11 @@ def main():
                 entry['doc'] = p_doc
             if v.get('assemblyUpdate'):
                 entry['assemblyUpdate'] = True
+                entry['updateDoc'] = p_path.name      # 出处写文件名，不写记录文档（两条源各自可追）
     verify = json.loads(Path(args.verify).read_text(encoding='utf-8'))
     missing_refs = {m['name']: m['missing'] for m in verify['layers']['L3']['missingExamples']}
     screen = json.loads(Path(args.screen).read_text(encoding='utf-8'))
+    receipts = receipt_updates(Path(args.receipts))
     readings = load_batch_readings()
     if SAGE_ROLES.exists():
         sage_roles = {k: [r['id'] for r in v.get('roles', [])]
@@ -325,6 +380,7 @@ def main():
             actions.append('classify-reconcile')
         if not actions:
             actions.append('closed')
+        upd_state, upd_by = update_state(name, progress, receipts)
 
         rows.append({
             'ledgerId': c['ledgerId'], 'opId': o['opId'], 'group': o['group'], 'name': name,
@@ -343,12 +399,13 @@ def main():
                         else 'lt90' if nums else 'none'),
             'optObs': 'low-tail-watch' if name in LOW_TAIL_WATCH else '',
             'assemblyStatus': c['assemblyStatus'],
-            'updateState': 'updated' if progress.get(name, {}).get('assemblyUpdate') else 'none',
+            'updateState': upd_state,
+            'updateStateBy': upd_by,
             'nextAction': ';'.join(actions),
         })
 
     if args.append:
-        rows.extend(load_append_rows(APPEND_SOURCES))
+        rows.extend(load_append_rows(APPEND_SOURCES, progress, receipts))
     cols = list(rows[0])
     ledger_path = out_dir / f'loop-ledger-{args.tag}.csv'
     with ledger_path.open('w', encoding='utf-8-sig', newline='') as f:
@@ -371,6 +428,14 @@ def main():
         'completeness': dict(Counter(r['completenessState'] for r in rows)),
         'optimization': dict(Counter(r['optState'] for r in rows)),
         'assembly': dict(Counter(r['assemblyStatus'] for r in rows)),
+        # 更新票分账：两条来源各算各的，两边都有＝both（不是新的第三态）
+        'updateVotes': dict(Counter(
+            ('both' if ('progress:' in r['updateStateBy'] and 'receipt:' in r['updateStateBy'])
+             else 'progress' if r['updateStateBy'].startswith('progress:')
+             else 'receipt' if r['updateStateBy'].startswith('receipt:')
+             else 'none') for r in rows)),
+        'receiptInput': {'root': str(args.receipts), 'updatedNames': len(receipts),
+                         'updatedNameList': sorted(receipts)},
         'loopClosed': loop_closed, 'loopOpen': len(rows) - loop_closed,
         'observation': LOW_TAIL_WATCH,
         'queue': dict(Counter(a for r in rows for a in r['nextAction'].split(';'))),
@@ -402,8 +467,61 @@ def main():
         json.dumps(summary, ensure_ascii=False, indent=1) + '\n', encoding='utf-8')
     print(json.dumps({k: summary[k] for k in
                       ['total', 'byGroup', 'classification', 'completeness', 'optimization', 'assembly',
-                       'loopClosed', 'loopOpen', 'queue']}, ensure_ascii=False, indent=1))
+                       'updateVotes', 'receiptInput', 'loopClosed', 'loopOpen', 'queue']}, ensure_ascii=False, indent=1))
+
+
+def self_test():
+    """更新票的双向证明：两条源各自要能单独把票投出来，也要各自不越权。
+
+    全部走合成回执目录，不读盘上那批真回执——真回执的读数由生成器自己报（summary.receiptInput）。
+    """
+    results, failures = [], []
+
+    def check(label, ok, detail=''):
+        results.append({'case': label, 'ok': bool(ok), 'detail': detail})
+        if not ok:
+            failures.append(label)
+
+    prog = {'a': {'assemblyUpdate': True, 'updateDoc': 'q5-progress.json', 'reeval': 'x', 'doc': 'y'}}
+    rec = {'b': {'files': ['update-b-x.json'], 'digests': ['deadbeef0000']}}
+    upd, by = update_state('a', prog, rec)
+    check('绿-progress 单独成票', (upd, by) == ('updated', 'progress:q5-progress.json'), f'{upd}|{by}')
+    upd, by = update_state('b', prog, rec)
+    check('绿-receipt 单独成票（这类从前隐形）', (upd, by) == ('updated', 'receipt:update-b-x.json'), f'{upd}|{by}')
+    both = {'c': {'assemblyUpdate': True, 'updateDoc': 'p.json'}}
+    upd, by = update_state('c', both, {'c': {'files': ['r1.json', 'r2.json'], 'digests': []}})
+    check('绿-两条都有就两条都报', (upd, by) == ('updated', 'progress:p.json;receipt:r1.json,r2.json'), by)
+    upd, by = update_state('d', prog, rec)
+    check('绿-两路都没落位＝none', (upd, by) == ('none', ''), f'{upd}|{by}')
+
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / 'update-yes.json').write_text(json.dumps({'mode': 'apply', 'results': [
+            {'name': 'a', 'status': 'updated', 'replacedDigest': 'd1'},
+            {'name': 'a', 'status': 'updated', 'replacedDigest': 'd2'},   # 同件两次更新：文件记一次、摘要记两条
+            {'name': 'b', 'status': 'applied'},                            # 首次投影，不算更新
+            {'name': 'c', 'status': 'updated'}]}), encoding='utf-8')
+        (root / 'dryrun.json').write_text(json.dumps({'mode': 'dry-run', 'results': [
+            {'name': 'c', 'status': 'updated'}]}), encoding='utf-8')        # 没落位，不投票
+        (root / 'applied-only.json').write_text(json.dumps({'mode': 'apply', 'results': [
+            {'name': 'z', 'status': 'applied'}]}), encoding='utf-8')
+        (root / 'broken.json').write_text('{ 不是 json', encoding='utf-8')   # 坏回执：跳过，宁缺不猜
+        got = receipt_updates(root)
+        check('绿-只认 apply×updated', sorted(got) == ['a', 'c'], f'收到={sorted(got)}')
+        check('绿-同件多票合并文件、分开摘要',
+              got['a']['files'] == ['update-yes.json'] and got['a']['digests'] == ['d1', 'd2'],
+              json.dumps(got.get('a'), ensure_ascii=False))
+        check('绿-dry-run 与 applied 都不投票', 'z' not in got and got['c']['files'] == ['update-yes.json'],
+              json.dumps(got.get('c'), ensure_ascii=False))
+        check('红-目录不在位＝空集（不报错也不造票）', receipt_updates(root / 'nope') == {})
+    print(json.dumps({'mode': 'self-test', 'cases': len(results), 'failed': len(failures),
+                      'failures': failures, 'results': results}, ensure_ascii=False, indent=1))
+    return 1 if failures else 0
 
 
 if __name__ == '__main__':
+    import sys
+    if '--self-test' in sys.argv:
+        raise SystemExit(self_test())
     main()
