@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync, existsSync, statSync, lstatSync } from 'node:fs';
 import { join, basename, dirname, relative } from 'node:path';
 import { writeFileSync } from 'node:fs';
@@ -162,7 +163,7 @@ function readRenameMap(trialHome, specHome) {
   return map;
 }
 
-export function buildLedger({ libraryRoot, trialHome, specHome, screenReport }) {
+export function buildLedger({ libraryRoot, trialHome, specHome, screenReport, disableRecertVote = false }) {
   const skippedTopLevel = [];
   const libraryFiles = walkLibrary(libraryRoot, '', [], skippedTopLevel);
   const renameMap = readRenameMap(trialHome, specHome);
@@ -183,6 +184,43 @@ export function buildLedger({ libraryRoot, trialHome, specHome, screenReport }) 
     const rel = relative(libraryRoot, stage.skill).split('\\').join('/');
     if (!judged.has(rel)) judged.set(rel, []);
     judged.get(rel).push(`r${stage.round}`);
+  }
+
+  // --- 票 2b：候选先认证、后写回的批（ZIP 族）---
+  // 判者轮次的 stage.json 指向 opt-run 候选目录，上面的「库内路径」匹配看不见它们；
+  // 42 件写回后被判空转＝正控-未触达残差报红的根因（2026-10-08 实测）。
+  // 接线口径：写回计划的 source 目录 == 该轮 stage.skill，且**计划字节摘要 == 该轮 digests 里的同一文件摘要**
+  // ——被评的字节必须就是入库的字节，否则不记票（宁缺不伪）。
+  const judgedBy = new Map();
+  for (const rel of judged.keys()) judgedBy.set(rel, 'path');
+  const planDir = join(trialHome, 'opt-run', 'writeback-zip');
+  if (!disableRecertVote && existsSync(planDir)) {
+    const stageBySkill = new Map();
+    for (const entry of readdirSync(join(trialHome, 'opt-run'), { withFileTypes: true })) {
+      if (!entry.isDirectory() || !/^r\d+$/.test(entry.name)) continue;
+      const stagePath = join(trialHome, 'opt-run', entry.name, 'stage.json');
+      let stage; try { stage = readJson(stagePath); } catch { continue; }
+      if (typeof stage.skill !== 'string' || !/opt-run\/candidates/.test(stage.skill)) continue;
+      const key = stage.skill.replace(/\/$/, '');
+      const prev = stageBySkill.get(key);
+      if (!prev || Number(stage.round) > Number(prev.round)) stageBySkill.set(key, stage);
+    }
+    for (const file of readdirSync(planDir).filter(name => /^plan-.*\.json$/.test(name))) {
+      let plan; try { plan = readJson(join(planDir, file)); } catch { continue; }
+      for (const op of plan.ops ?? []) {
+        if (op.kind !== 'put' || typeof op.relPath !== 'string' || typeof op.source !== 'string') continue;
+        if (basename(op.relPath) !== SKILL_MD) continue;
+        const srcDir = op.source.split('/').slice(0, -1).join('/').replace(/\/$/, '');
+        const stage = stageBySkill.get(srcDir);
+        if (!stage) continue;
+        const digest = (stage.digests ?? {})[SKILL_MD] ?? null;
+        if (!digest || typeof op.sourceSha256 !== 'string' || !op.sourceSha256.startsWith(digest)) continue;
+        const dir = dirname(op.relPath);
+        if (!judged.has(dir)) judged.set(dir, []);
+        judged.get(dir).push(`r${stage.round}`);
+        judgedBy.set(dir, `zip-recert:r${stage.round}`);
+      }
+    }
   }
 
   // --- 票 3：写回备份根（覆盖写的前像）；首入件没有前像，单独一票 ---
@@ -213,6 +251,7 @@ export function buildLedger({ libraryRoot, trialHome, specHome, screenReport }) 
   for (const rel of [
     join(specHome, '143-library-normalize/p2-writeback/l5-ledger.csv'),
     join(specHome, '143-library-normalize/lowband-lb8/container3-salvage/l5-ledger.csv'),
+    join(specHome, '145-standardization-baseline/zip42-writeback/l5-ledger.csv'),
   ]) {
     const rows = readCsv(rel);
     if (!rows) continue;
@@ -292,7 +331,7 @@ export function buildLedger({ libraryRoot, trialHome, specHome, screenReport }) 
     const loadedHit = [...names].some(name => loaded.has(name));
     const votes = {
       screened: screened.has(rel) ? yes('path') : no,
-      judged: judgedDirect?.length ? yes('path')
+      judged: judgedDirect?.length ? yes(judgedBy.get(dir) ?? 'path')
         : judgedViaRename.length ? yes('rename') : no,
       writtenBack: writtenHere ? yes('path')
         : firstEntryHit ? yes('firstEntry-name') : no,
@@ -341,7 +380,10 @@ function classifyBucket(votes, gapAxes) {
 function controls({ libraryRoot, trialHome, specHome }) {
   const failures = [];
   let checked = 0;
-  const report = readJson(join(trialHome, 'screening/library-screen-2026-10-07b.json'));
+  // 屏检快照不能写死日期：写死后未来的批会静默拿旧快照比对（规则二：会被重建的工件名不写死）。
+  const screenDir = join(trialHome, 'screening');
+  const screenPick = readdirSync(screenDir).filter(name => /^library-screen-.*\.json$/.test(name)).sort().pop();
+  const report = readJson(join(screenDir, screenPick));
   const ledger = buildLedger({ libraryRoot, trialHome, specHome, screenReport: report });
   const byDir = new Map(ledger.items.map(item => [item.dir, item]));
   const expect = (label, condition, detail) => { checked += 1; if (!condition) failures.push(`${label} :: ${detail}`); };
@@ -366,6 +408,36 @@ function controls({ libraryRoot, trialHome, specHome }) {
     `残差 ${residual.length} 件：${residual.map(item => item.dir).join(', ') || '（无）'}`);
   const judgedCount = ledger.items.filter(item => item.votes.judged.value).length;
   expect('正控-计票非零', judgedCount > 600, `judged 件数 ${judgedCount} 不应接近 0`);
+
+  // 正控五：ZIP 族首入批（候选先认证、后写回）必须靠写回计划↔判者轮次接上 judged 票，
+  // 且**当场重算**「库内现字节 == 计划 sourceSha256 == 该轮 digests 摘要」——不是引用 L1 的结论。
+  const zipBatch = ledger.items.filter(item => String(item.votes.judged.by ?? '').startsWith('zip-recert:'));
+  const planDirCtl = join(trialHome, 'opt-run', 'writeback-zip');
+  let zipByteCheck = 0, zipByteFail = [];
+  if (existsSync(planDirCtl)) {
+    for (const file of readdirSync(planDirCtl).filter(name => /^plan-.*\.json$/.test(name))) {
+      const plan = readJson(join(planDirCtl, file));
+      for (const op of plan.ops ?? []) {
+        if (op.kind !== 'put' || basename(op.relPath ?? '') !== SKILL_MD) continue;
+        const now = createHash('sha256').update(readFileSync(join(libraryRoot, op.relPath))).digest('hex');
+        zipByteCheck += 1;
+        if (now !== op.sourceSha256) zipByteFail.push(op.relPath);
+      }
+    }
+  }
+  const zipFiveVotes = zipBatch.filter(item => item.votes.judged.value
+    && item.votes.writtenBack.value === true && item.votes.loaded.value === true && item.votes.screened.value === true);
+  const zipNotLoop = zipBatch.filter(item => item.votes.inLoop.value);
+  expect('正控-ZIP 首入批五票齐（除管理圈）', zipFiveVotes.length === 42 && zipNotLoop.length === 0,
+    `五票齐 ${zipFiveVotes.length}/42｜不应在管理圈却在的 ${zipNotLoop.length} 件：${zipNotLoop.slice(0, 3).map(item => item.dir).join(', ') || '（无）'}`);
+  expect('正控-ZIP 首入批 judged 接得上', zipBatch.length === 42 && zipByteCheck === 42 && zipByteFail.length === 0,
+    `zip-recert 票 ${zipBatch.length} 件（应 42）｜逐字节复核 ${zipByteCheck} 件，不符 ${zipByteFail.length} 条：${zipByteFail.slice(0, 3).join(', ') || '（无）'}`);
+  // 负控-ZIP：摘掉 recert 源后这 42 件必须整体回到未判读——证明那条票确实由该源提供，不是别处蹭来的。
+  const noRecert = buildLedger({ libraryRoot, trialHome, specHome, screenReport: report, disableRecertVote: true });
+  const stillClaimed = noRecert.items.filter(item => item.batch === 'skills-manus' || item.batch === 'skills-minmaxdesign')
+    .filter(item => item.votes.judged.value);
+  expect('负控-ZIP 源摘掉即转假', stillClaimed.length === 0,
+    `摘掉 recert 源后仍有 ${stillClaimed.length} 件带 judged 票：${stillClaimed.slice(0, 3).map(item => item.dir).join(', ') || '（无）'}`);
 
   // 负控一：刚重下载、任何台账都没有的批必须整批判未触达。
   const fresh = ledger.items.filter(item => item.batch === 'skill-hl');
@@ -433,10 +505,13 @@ async function main(argv) {
   const out = value('--out');
   if (out) {
     writeFileSync(out, JSON.stringify(result, null, 1));
-    const csv = ['dir,batch,fmName,bucket,votesJudged,votesWrittenBack,votesLoaded,votesInLoop,bestScore,descChars,screenSeverity,findings,gapAxes',
-      ...ledger.items.map(i => [i.dir, i.batch, i.fmName ?? '', i.bucket, i.votes.judged, i.votes.writtenBack,
-        i.votes.loaded, i.votes.inLoop, i.bestCertifiedScore ?? '', i.descriptionChars, i.screenSeverity ?? '',
-        i.screenFindingCount, i.gapAxes.join(';')].map(v => (typeof v === 'string' && v.includes(',') ? `"${v}"` : v)).join(','))].join('\n');
+    // 票现在是 {value, by} 对象：直接拼进 CSV 会写成 [object Object]（本轮实测发现，早于本批就存在）。
+    // 改为 value 入列、judged 的 provenance 单列（by=rename / zip-recert:rN 这类信息不能只在 json 里）。
+    const csv = ['dir,batch,fmName,bucket,votesJudged,votesWrittenBack,votesLoaded,votesInLoop,judgedBy,bestScore,descChars,screenSeverity,findings,gapAxes',
+      ...ledger.items.map(i => [i.dir, i.batch, i.fmName ?? '', i.bucket,
+        i.votes.judged.value, i.votes.writtenBack.value, i.votes.loaded.value, i.votes.inLoop.value,
+        i.votes.judged.by ?? '', i.bestCertifiedScore ?? '', i.descriptionChars, i.screenSeverity ?? '',
+        i.screenFindingCount, i.gapAxes.join(';')].map(v => (typeof v === 'string' && (v.includes(',') || v.includes('"')) ? `"${v.replace(/"/g, '""')}"` : v)).join(','))].join('\n');
     writeFileSync(`${out.replace(/\.json$/, '')}.csv`, `${csv}\n`);
   }
   const { items, ...summary } = result;
