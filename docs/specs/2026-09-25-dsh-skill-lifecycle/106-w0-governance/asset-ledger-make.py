@@ -1,14 +1,22 @@
 #!/usr/bin/env python3
-"""W0 治理账本 v1：生成与验证（零请求、只读 104 基线）。
+"""W0 治理账本 v1：生成与验证（零请求、只读源库）。
 
 用法：
-    python3 -B asset-ledger-make.py            # 生成账本与汇总
+    python3 -B asset-ledger-make.py            # 生成账本与汇总（含库面位置门，不过即退出）
     python3 -B asset-ledger-make.py --verify   # 生成 + 回源抽样 + 三资产走查 + Sage staging 核对
+    python3 -B asset-ledger-make.py --self-test  # 库面状态机与门的双向证明（合成行，不依赖当下库面）
+
+口径（2026-10-08 用户拍板）：
+  · 「面为真、账本按现字节重算」——entrySha256/bytes 取库面当前字节（zip 行取容器内成员），
+    104 原读数保留在 entrySha256_104；精确字节分组因此反映现在的库，而不是 2026-09-28 那次扫描。
+  · faceState 五态现算；未登记的缺席、容器缺失、moved 后继缺失、以及「投影可选中的行不 present」一律判红。
+  · W0 期的绝对数常数降级为 `w0BaselineComparison`（只报偏移，不计入 errors）。
 
 输出（同目录）：
-    governance-ledger-v1.csv              全量 34,468 行账本
-    governance-ledger-v1.summary.json     汇总、冻结输入哈希、分组统计
+    governance-ledger-v1.csv              全量账本（行数现算自 104 四份索引）
+    governance-ledger-v1.summary.json     汇总、冻结输入哈希、分组与库面状态统计
     w0-verification.json                  --verify 时的验证读数
+    face-drift-unattributed.json          与 104 不同且本地无受控改动痕迹的行（待逐族裁定）
 """
 import csv
 import hashlib
@@ -238,6 +246,42 @@ def classify_faces(rows, ev, exceptions):
     return counts
 
 
+def refresh_bytes(rows):
+    """用户 2026-10-08 拍板「面为真、账本按现字节重算」：
+    `entrySha256`／`bytes` 一律取库面**当前字节**，104 的原读数保留在 `entrySha256_104` 里可追。
+
+    这样账本的身份口径（精确字节分组、同名不同字节）反映的是现在的库，而不是 2026-09-28 那次扫描；
+    zip 内条目也从容器里取出成员字节重算（容器读不到才退回 104 读数并标注）。
+    """
+    stats = Counter()
+    for r in rows:
+        r.setdefault('sha104', r['sha'])
+        r['shaSource'], r['shaDrift'] = '104-reading', 'no-face'
+        try:
+            if '!' in r['path']:
+                container, _, member = r['path'].partition('!')
+                with zipfile.ZipFile(container) as z:
+                    data = z.read(member)
+                now, size = hashlib.sha256(data).hexdigest(), len(data)
+            else:
+                p = Path(r['path'])
+                if not p.is_file():
+                    stats['noFaceFile'] += 1
+                    continue
+                now, size = file_sha(p), p.stat().st_size
+        except (OSError, KeyError, zipfile.BadZipFile) as ex:
+            stats['unreadable'] += 1
+            r['shaError'] = type(ex).__name__
+            continue
+        r['sha'] = now
+        r['bytes'] = size
+        r['shaSource'] = 'face'
+        r['shaDrift'] = 'yes' if now != r['sha104'] else 'no'
+        stats['recomputed'] += 1
+        stats['drift'] += r['shaDrift'] == 'yes'
+    return stats
+
+
 def projection_eligible(row):
     """与 assembly-plan-make.py 的选择规则同口径：81-Skills 全部（A 组）＋ route=role-candidate 的标准件（B 组）。"""
     if row['sourceKind'] != 'standard':
@@ -332,6 +376,7 @@ def main(verify):
     hard = face_gates(rows, face_counts)
     if hard:
         raise SystemExit('库面位置门不过：\n  - ' + '\n  - '.join(hard))
+    byte_stats = refresh_bytes(rows)     # 门先过（路径不成立时重算无意义），再按现字节重算
 
     bysha = defaultdict(list)
     byname = defaultdict(list)
@@ -352,7 +397,8 @@ def main(verify):
                     'bodyChars', 'name', 'nameKebabValid', 'route', 'roleCandidates',
                     'statusSignals', 'qualityBlocked', 'exactByteGroupId', 'exactByteGroupSize',
                     'sameNameGroupId', 'sameNameGroupSize', 'provenanceRoot',
-                    'runtimeAcceptance', 'evidenceRef', 'faceState', 'faceMovedTo'])
+                    'runtimeAcceptance', 'evidenceRef', 'faceState', 'faceMovedTo',
+                    'shaSource', 'entrySha256_104', 'shaDrift'])
         for i, r in enumerate(rows):
             key = name_key(r['name']) if r['name'] else ''
             blocked = any(t in (r['statusSignals'] or '') for t in BLOCK_TOKENS)
@@ -362,7 +408,8 @@ def main(verify):
                         sha_gid[r['sha']], len(bysha[r['sha']]),
                         name_gid.get(key, ''), len(byname.get(key, [])),
                         r['provenanceRoot'], 'not-tested', r['evidenceRef'],
-                        r['faceState'], r['faceMovedTo']])
+                        r['faceState'], r['faceMovedTo'],
+                        r['shaSource'], r['sha104'], r['shaDrift']])
 
     kind_counts = Counter(r['sourceKind'] for r in rows)
     route_counts = Counter(r['route'] for r in rows)
@@ -408,11 +455,21 @@ def main(verify):
             'nameGroupIdBasis': 'casefold+NFC（CSV sameNameGroupId 用此口径；Raw 供与 104 对账）',
         },
         'join': {'missingRoute': missing_route},
-        'method': '只读 104 基线索引；路由沿用 104 机器候选路由（未重判）；'
-                  '分组=完整入口字节 sha256 与 name casefold；runtimeAcceptance 一律 not-tested。',
+        'byteRefresh': {
+            'stats': dict(byte_stats),
+            'rows': len(rows),
+            'driftFrom104': sum(1 for r in rows if r.get('shaDrift') == 'yes'),
+            'policy': ('用户 2026-10-08 拍板「面为真、账本按现字节重算」：entrySha256/bytes 取库面当前字节'
+                       '（zip 内条目从容器取成员字节），104 原读数留在 entrySha256_104 可追；'
+                       '因此精确字节分组与同名不同字节判定都按现算口径，与 104 期 W0 常数不再可比。'),
+        },
+        'method': ('身份与位置：以库面现字节为准（104 原读数保留为可追字段）；'
+                   '路由沿用 104 机器候选路由（未重判）；'
+                   '分组=完整入口字节 sha256（现算）与 name casefold；runtimeAcceptance 一律 not-tested。'),
         'limits': ['账本=位置与身份台账，不是语义去重或能力认证',
                    '路由为候选投影，角色引用不构成任命',
-                   'Sage staging 核对见 w0-verification.json（只读）'],
+                   'Sage staging 核对见 w0-verification.json（只读）',
+                   'W0 期的绝对数常数已随 D213 追加与各轮写回失效，见 w0-verification.json 的 w0BaselineComparison'],
     }
     (BASE / 'governance-ledger-v1.summary.json').write_text(
         json.dumps(summary, ensure_ascii=False, indent=2) + '\n')
@@ -424,65 +481,72 @@ def main(verify):
 
     checks = []
     errors = []
+    baseline = []      # W0 冻结基线对照：只报偏移，不作门禁（用户 2026-10-08 选定「保留并显式标注＋另设现行门」）
 
     def check(name, ok, detail=None):
         checks.append({'check': name, 'ok': bool(ok), 'detail': detail})
         if not ok:
             errors.append(name)
 
-    check('rows==34468', len(rows) == 34468, len(rows))
-    check('kinds==728/20361/508/12871',
-          dict(kind_counts) == {'standard': 728, 'qoder': 20361, 'zip': 508, 'career': 12871},
-          dict(kind_counts))
+    def against_w0(name, ok, detail=None):
+        baseline.append({'check': name, 'matchesW0': bool(ok), 'detail': detail})
+
     combined = json.loads((SRC / 'combined-entry-summary.json').read_text())
-    check('distinctBytes==30225', len(bysha) == combined['distinctEntryBytes'],
-          {'ledger': len(bysha), 'baseline': combined['distinctEntryBytes']})
     same_name_diff_raw = sum(1 for _, members in byname_raw.items()
                              if len({rows[i]['sha'] for i in members}) > 1)
-    check('sameNameGroupsRaw==22553', len(byname_raw) == combined['distinctNonemptyNames'],
-          {'ledgerRaw': len(byname_raw), 'baseline': combined['distinctNonemptyNames'],
-           'ledgerNFC': len(byname)})
-    check('sameNameDiffBytesRaw==2993', same_name_diff_raw == combined['sameNameDifferentEntryBytesGroups'],
-          {'ledgerRaw': same_name_diff_raw,
-           'baseline': combined['sameNameDifferentEntryBytesGroups']})
-    check('spanningGroups==777', span == combined['byteGroupsSpanningSources'],
-          {'ledger': span, 'baseline': combined['byteGroupsSpanningSources']})
+    against_w0('rows==34468', len(rows) == 34468, {'now': len(rows)})
+    against_w0('kinds==728/20361/508/12871',
+               dict(kind_counts) == {'standard': 728, 'qoder': 20361, 'zip': 508, 'career': 12871},
+               {'now': dict(kind_counts)})
+    against_w0('distinctBytes==30225', len(bysha) == combined['distinctEntryBytes'],
+               {'ledger': len(bysha), 'w0': combined['distinctEntryBytes'],
+                'note': '账本已改按现字节分组，与 104 期口径不可直接相等'})
+    against_w0('sameNameGroupsRaw==22553', len(byname_raw) == combined['distinctNonemptyNames'],
+               {'ledgerRaw': len(byname_raw), 'w0': combined['distinctNonemptyNames'], 'ledgerNFC': len(byname)})
+    against_w0('sameNameDiffBytesRaw==2993', same_name_diff_raw == combined['sameNameDifferentEntryBytesGroups'],
+               {'ledgerRaw': same_name_diff_raw, 'w0': combined['sameNameDifferentEntryBytesGroups']})
+    against_w0('spanningGroups==777', span == combined['byteGroupsSpanningSources'],
+               {'ledger': span, 'w0': combined['byteGroupsSpanningSources']})
     rs = json.loads((SRC / 'routing-summary.json').read_text())
-    base_routes = {k: v for k, v in rs['byRoute'].items()}
-    check('route-counts-match-104', dict(route_counts) == base_routes,
-          {'ledger': dict(route_counts), 'baseline': base_routes})
-    check('route-join-complete', missing_route == 0, missing_route)
+    against_w0('route-counts-match-104', dict(route_counts) == rs['byRoute'],
+               {'ledger': dict(route_counts), 'w0': rs['byRoute']})
 
-    # 库面状态走查：漂移只统计（104 之后各批受控写回本就该改字节），缺席必须已被登记
+    # 现行门：与 104 的绝对数无关、每次都能重算、且真会红的对照
+    src_counts = {'standard': len(json.loads((SRC / 'library-entry-index.json').read_text())),
+                  'qoder': len(json.loads((SRC / 'qoder-entry-index.json').read_text())['entries']),
+                  'zip': len(json.loads((SRC / 'archive-entry-index.json').read_text())['entries']),
+                  'career': len(json.loads((SRC / 'career-entry-index.json').read_text())['records'])}
+    check('rows-equal-input-records', len(rows) == sum(src_counts.values()),
+          {'ledger': len(rows), 'inputs': src_counts})
+    check('route-join-complete', missing_route == 0, missing_route)
+    no_face = [r for r in rows if r['shaSource'] != 'face' and r['faceState'] in ('present', 'inside-archive')]
+    check('byte-refresh-covers-face-rows', not no_face,
+          {'skipped': [r['path'] for r in no_face[:5]], 'stats': dict(byte_stats),
+           'driftFrom104': sum(1 for r in rows if r['shaDrift'] == 'yes')})
+
+
+    # 库面状态走查：缺席必须已被登记
     check('face-no-unrecorded-absence', face_counts.get('absent-unrecorded', 0) == 0, dict(face_counts))
-    drift = []
-    for r in rows:
-        if r['faceState'] == 'present' and Path(r['path']).is_file() and file_sha(Path(r['path'])) != r['sha']:
-            drift.append(r)
+    drift = [r for r in rows if r['shaDrift'] == 'yes']
     by_kind_drift = Counter(r['sourceKind'] for r in drift)
-    check('face-drift-is-explained-by-writeback-trail', True,
-          {'driftRows': len(drift), 'byKind': dict(by_kind_drift),
-           'note': '漂移数只作读数：104 之后每轮受控写回都会改字节；本检查不判红，判红的是"无痕迹的漂移"'})
-    # 旧 rehash-sample-30 的前提（104 摘要==现字节）已被 143→D212 各轮受控写回系统性推翻，
-    # 原样保留只会恒红、并教会人忽略它。换成它本要防的事：漂移要能指到一处受控改动痕迹。
-    # 这一条**暂不判红**：实测有 78 行指不到本地痕迹（多为上游包整根被替换），属待裁定的发现而不是已闭环的门禁；
-    # 清单落 face-drift-unattributed.json，裁定后再升级成硬门。
+    # 漂移本身不再是缺陷（账本已按现字节记账）；仍要防的是"改动了却没有任何痕迹"——它现在是一条**可见清单**，
+    # 78 行指不到本地痕迹（多为上游包整根替换），逐族裁定后再升级成硬门。
     trails = _trail_digests()
-    attributed = [r for r in drift if file_sha(Path(r['path'])) in trails]
-    unattributed = [r for r in drift if file_sha(Path(r['path'])) not in trails]
+    attributed = [r for r in drift if r['sha'] in trails]
+    unattributed = [r for r in drift if r['sha'] not in trails]
     (BASE / 'face-drift-unattributed.json').write_text(json.dumps({
         'record_type': 'face-drift-unattributed', 'at': now,
-        'note': ('漂移行里，现字节在 trial-home 任何回执/计划/登记 或 _assembly-history 前像里找不到出处的。'
-                 '这不等于"被谁偷改"——上游包整根被替换（如 MuseAI opt/hatch 若干件、brand-monitoring 之类）'
-                 '本来就不会留下本地回执；但它也不能被解释为正常，需要逐族裁定后再升级成硬门。'),
+        'note': ('与 104 读数不同、且现字节在 trial-home 任何回执/计划/登记 或 _assembly-history 前像里找不到出处的行。'
+                 '这不等于"被谁偷改"——上游包整根被替换（如 MuseAI opt/hatch 若干件、brand-monitoring 之类）本来就不留本地回执；'
+                 '但也不能算正常，逐族裁定后升级成硬门。'),
         'driftRows': len(drift), 'attributed': len(attributed), 'unattributed': len(unattributed),
         'byRoot': dict(Counter(r['path'].split('技能库/')[-1].split('/')[0] for r in unattributed).most_common()),
         'items': [{'name': r['name'], 'relPath': r['path'].split('技能库/')[-1], 'route': r['route'],
-                   'sha104': r['sha'], 'shaNow': file_sha(Path(r['path']))} for r in unattributed],
+                   'sha104': r['sha104'], 'shaNow': r['sha']} for r in unattributed],
     }, ensure_ascii=False, indent=1) + '\n', encoding='utf-8')
     check('face-drift-attribution-report', True,
           {'drift': len(drift), 'attributed': len(attributed), 'unattributed': len(unattributed),
-           'register': 'face-drift-unattributed.json'})
+           'byKind': dict(by_kind_drift), 'register': 'face-drift-unattributed.json'})
     # 容器内条目：104 用 `容器.zip!内路径` 记，摘要对得上才证明这不是含糊记账
     sample = [r for r in rows if r['faceState'] == 'inside-archive'][:12]
     ok_member = bad_member = err = 0
@@ -503,38 +567,30 @@ def main(verify):
         step = max(1, len(sub) // count)
         return sub[::step][:count]
 
+    # 抽样核「shaSource 标得诚实」：标 face 的必须等于现字节；标 104-reading 的那条路径必须真的不在位。
+    # 旧的「零漂移」断言在账本改按现字节记账后已无意义——它现在核的是这条新口径自己的诚实性。
     sample = pick('standard', 10) + pick('qoder', 10) + pick('zip', 5) + pick('career', 5)
-    sample_results = []
-    unexplained = []
-    registered_unattributed = {i['relPath'] for i in json.loads(
-        (BASE / 'face-drift-unattributed.json').read_text(encoding='utf-8')).get('items', [])} \
-        if (BASE / 'face-drift-unattributed.json').exists() else set()
+    sample_results, bad_source = [], []
     for r in sample:
-        ok = False
         actual = None
         try:
-            if r['sourceKind'] == 'zip':
+            if '!' in r['path']:
                 za, member = r['path'].split('!', 1)
                 with zipfile.ZipFile(za) as z:
                     actual = hashlib.sha256(z.read(member)).hexdigest()
             else:
                 actual = file_sha(r['path'])
-            ok = actual == r['sha']
         except Exception as ex:  # noqa: BLE001 - 记录失败原因即可
             actual = 'ERR:' + type(ex).__name__
-        rel = r['path'].split('技能库/')[-1]
-        explained = ok or actual in trails or rel in registered_unattributed
-        if not explained:
-            unexplained.append({'name': r['name'], 'relPath': rel, 'recorded': r['sha'][:12],
-                                'actual': (actual or '')[:12]})
-        sample_results.append({'kind': r['sourceKind'], 'path': r['path'], 'shaMatches': ok,
-                               'explained': explained, 'actualSha256_12': (actual or '')[:12]})
-    # 断言从「零漂移」改成「漂移必须可解释」：前者在 143→D212 之后是恒红噪声（会把人训练成忽略门禁），
-    # 后者仍拦住真正要防的事——**新出现的、既无痕迹也未登记的**字节变化。
-    check('rehash-sample-30-explained', not unexplained,
-          {'sampled': len(sample_results),
-           'mismatched': sum(1 for s in sample_results if not s['shaMatches']),
-           'unexplained': unexplained[:8]})
+        face_says_here = r['shaSource'] == 'face'
+        good = (actual == r['sha']) if face_says_here else not Path(r['path']).exists()
+        if not good:
+            bad_source.append({'name': r['name'], 'shaSource': r['shaSource'],
+                               'relPath': r['path'].split('技能库/')[-1],
+                               'actual_12': (actual or '')[:12], 'ledger_12': r['sha'][:12]})
+        sample_results.append({'kind': r['sourceKind'], 'path': r['path'],
+                               'shaSource': r['shaSource'], 'consistent': good})
+    check('sample-sha-source-honest', not bad_source, {'sampled': len(sample_results), 'bad': bad_source[:6]})
 
     def find(kind, match):
         for r in rows:
@@ -620,8 +676,15 @@ def main(verify):
     result = {
         'verifiedAt': now,
         'status': 'pass' if not errors else 'needs-review',
-        'scope': 'W0 账本与规范：只读核对、冻结 104 基线；不是技能验收',
+        'scope': 'W0 账本与规范：只读核对＋库面现字节重算；不是技能验收',
         'checks': checks,
+        'w0BaselineComparison': {
+            'note': ('这些对照的是 W0 冻结时点（104 期）的绝对数：D213 追加 42 行与各轮受控写回之后必然偏移，'
+                     '用户 2026-10-08 选定「保留并显式标注＋另设现行门」——故**不计入 errors**。'
+                     '现行门见 checks（rows-equal-input-records／route-join-complete／byte-refresh-covers-face-rows／face-*／sample-*）。'),
+            'offBaseline': [b['check'] for b in baseline if not b['matchesW0']],
+            'items': baseline,
+        },
         'sample30': sample_results,
         'walkthrough3': walkthrough,
         'sageStaging': staging,
@@ -633,7 +696,8 @@ def main(verify):
     (BASE / 'w0-verification.json').write_text(
         json.dumps(result, ensure_ascii=False, indent=2) + '\n')
     print(json.dumps({'status': result['status'], 'checks': checks,
-                      'sample30Failed': len(bad),
+                      'w0OffBaseline': result['w0BaselineComparison']['offBaseline'],
+                      'sample30BadSource': len(bad_source),
                       'sageStaging': staging}, ensure_ascii=False, indent=2))
     return 0 if not errors else 1
 

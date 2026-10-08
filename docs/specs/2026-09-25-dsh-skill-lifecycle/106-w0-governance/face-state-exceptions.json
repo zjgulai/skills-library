@@ -1,0 +1,16 @@
+{
+  "record_type": "face-state-exceptions",
+  "at": "2026-10-08",
+  "note": "104 索引里指向库面不存在路径、且没有任何改名/删除登记可解释的行。门要求：未登记的缺席一律红。",
+  "rule": "只减不增。后继一旦有改名登记就应转为 moved 并从本册删除；新增条目必须同时给证据来源与不合并声明。",
+  "items": [
+    {
+      "relPath": "paper_to_skills/paper2skills-skills/paper-review/SKILL.md",
+      "name": "paper-review",
+      "reason": "104 扫描之后上游仓自己调整了该目录集合：库面 paper2skills-skills 现存 7 个子目录（paper-extract/paper-maintenance/paper-skill-reviewer-crossborder/paper-skills-graph/paper-sync/paper-topic/paper-workflow）里没有 paper-review；53 个带回执的改名备份根（连同 rename-put/remove 双根共 63 对配对，见 governance-ledger-v1.summary.json 的 faceState.evidencePairs）与 143 的 norm01 改名计划（9 条）都没有它；上游仓 git 历史里也查不到该路径。",
+      "evidence": "ls 技能库/paper_to_skills/paper2skills-skills；grep paper-review 于 library-backup-rename-*/rename-receipt.json 与 143-library-normalize/fix-plans/norm01-rename-plan.json；git -C paper_to_skills log --all -- '*paper-review*'（无输出）",
+      "notMergedWith": "paper-skill-reviewer-crossborder（名字不同且无任何登记把它们连上，**不当作同一件**）",
+      "disposition": "登记为历史位置：行留在账本（那是 104 当时的观测），投影与覆盖统计一律按 faceState 过滤"
+    }
+  ]
+}

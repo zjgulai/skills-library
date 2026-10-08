@@ -49,4 +49,6 @@ library-backup-*/
 !/docs/specs/2026-09-25-dsh-skill-lifecycle/**/*.py
 !/docs/specs/2026-09-25-dsh-skill-lifecycle/**/*.mjs
 !/docs/specs/2026-09-25-dsh-skill-lifecycle/**/*.js
+# 例外中的例外：库面状态门的**输入**（缺席例外册）必须随仓库走，否则 clone 之后生成必然判红。
+!/docs/specs/2026-09-25-dsh-skill-lifecycle/106-w0-governance/face-state-exceptions.json
 /skill教材-*.html
